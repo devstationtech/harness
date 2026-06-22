@@ -1,0 +1,19 @@
+# --- Personal / non-OSS material that happens to live in this working tree ---
+# These predate the CLI project and must never be published.
+/references/
+/tools/
+/.obsidian/
+/conceitos-agentes-rules-skills-specs.md
+/discovery-harness-llm-arquitetura-homogenea.md
+
+# --- Go ---
+/harness
+/dist/
+*.test
+*.out
+coverage*
+
+# --- Editors / OS ---
+.DS_Store
+.idea/
+.vscode/
