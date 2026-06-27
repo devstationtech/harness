@@ -70,10 +70,18 @@ func List(out io.Writer) error {
 		if a.OverridesShared {
 			source = "local (override)"
 		}
-		fmt.Fprintf(out, "  [ ] %s | %s | %s\n", a.Name, source, a.Description)
+		fmt.Fprintf(out, "  [ ] %s | %s | %s\n", label(a.Name, a.Version), source, a.Description)
 	}
 	printIssues(out, cat.Issues())
 	return nil
+}
+
+// label renders an artifact as name@version, or just name when unversioned.
+func label(name, version string) string {
+	if version == "" {
+		return name
+	}
+	return name + "@" + version
 }
 
 // printIssues reports artifacts that were skipped during loading, with reasons.

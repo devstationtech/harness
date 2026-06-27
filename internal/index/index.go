@@ -24,6 +24,7 @@ type Record struct {
 	Source      string `yaml:"source"`
 	Kind        string `yaml:"kind"`
 	Name        string `yaml:"name"`
+	Version     string `yaml:"version,omitempty"`
 	Description string `yaml:"description"`
 }
 
@@ -45,6 +46,7 @@ func Refresh(indexDir string, src source.Source) (int, error) {
 			Source:      src.Name(),
 			Kind:        string(a.Kind),
 			Name:        a.Name,
+			Version:     a.Version,
 			Description: a.Description,
 		})
 	}

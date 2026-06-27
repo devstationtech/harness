@@ -38,7 +38,7 @@ func Search(out io.Writer, args []string) error {
 		return nil
 	}
 	for _, r := range records {
-		fmt.Fprintf(out, "  %s/%s\t%s\t%s\n", r.Source, r.Name, r.Kind, r.Description)
+		fmt.Fprintf(out, "  %s/%s\t%s\t%s\n", r.Source, label(r.Name, r.Version), r.Kind, r.Description)
 	}
 	return nil
 }
