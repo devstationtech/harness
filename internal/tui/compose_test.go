@@ -42,10 +42,8 @@ func chooseByName(t *testing.T, view *composeView, contract, capabilityName stri
 
 func selectedNames(m Model) map[string]bool {
 	out := map[string]bool{}
-	for _, it := range m.items {
-		if it.selected {
-			out[it.artifact.Name] = true
-		}
+	for _, a := range m.Selected() {
+		out[a.Name] = true
 	}
 	return out
 }

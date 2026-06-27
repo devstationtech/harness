@@ -56,27 +56,36 @@ type detailView struct {
 // over the merged catalog. It performs no I/O; the caller reads Selected after
 // the program exits and persists the result.
 type Model struct {
-	styles    styles
-	version   string
-	items     []item
-	nameWidth int // shared width of the name column (table alignment)
-	cursor    int
-	offset    int // first visible visual-line (scroll position)
-	width     int
-	height    int
-	warnings  int // count of artifacts skipped while loading
-	confirmed bool
-	detail    *detailView  // non-nil while the info page is open
-	compose   *composeView // non-nil while the composition screen is open
+	styles  styles
+	version string
+	items   []item
+	// capabilities are hidden from the selection list — they implement an
+	// abstract skill and are chosen on its composition screen, not on their own.
+	capabilities []item
+	nameWidth    int // shared width of the name column (table alignment)
+	cursor       int
+	offset       int // first visible visual-line (scroll position)
+	width        int
+	height       int
+	warnings     int // count of artifacts skipped while loading
+	confirmed    bool
+	detail       *detailView  // non-nil while the info page is open
+	compose      *composeView // non-nil while the composition screen is open
 }
 
 // New builds a selection model from the merged catalog. Artifacts whose identity
 // is in preselected start checked. warnings is the number of skipped artifacts.
 func New(artifacts []artifact.Artifact, preselected map[artifact.Identity]bool, version string, warnings int) Model {
-	items := make([]item, 0, len(artifacts))
+	var items, capabilities []item
 	nameWidth := minNameWidth
 	for _, a := range artifacts {
-		items = append(items, item{artifact: a, selected: preselected[a.Identity()]})
+		entry := item{artifact: a, selected: preselected[a.Identity()]}
+		if a.IsCapability() {
+			// Hidden from the list; surfaced on the abstract's composition screen.
+			capabilities = append(capabilities, entry)
+			continue
+		}
+		items = append(items, entry)
 		if w := lipgloss.Width(a.Name); w > nameWidth {
 			nameWidth = w
 		}
@@ -84,16 +93,29 @@ func New(artifacts []artifact.Artifact, preselected map[artifact.Identity]bool, 
 	if nameWidth > maxNameWidth {
 		nameWidth = maxNameWidth
 	}
-	return Model{styles: newStyles(), version: version, items: items, nameWidth: nameWidth, warnings: warnings}
+	return Model{
+		styles:       newStyles(),
+		version:      version,
+		items:        items,
+		capabilities: capabilities,
+		nameWidth:    nameWidth,
+		warnings:     warnings,
+	}
 }
 
 // Confirmed reports whether the user chose to save (Enter) rather than quit.
 func (m Model) Confirmed() bool { return m.confirmed }
 
-// Selected returns the artifacts the user checked.
+// Selected returns the artifacts the user checked, including capabilities chosen
+// on a composition screen.
 func (m Model) Selected() []artifact.Artifact {
 	var out []artifact.Artifact
 	for _, it := range m.items {
+		if it.selected {
+			out = append(out, it.artifact)
+		}
+	}
+	for _, it := range m.capabilities {
 		if it.selected {
 			out = append(out, it.artifact)
 		}

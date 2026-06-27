@@ -51,7 +51,7 @@ func (m *Model) openCompose() {
 	view := &composeView{abstract: abstract}
 	for _, contract := range abstract.Contracts {
 		choice := contractChoice{contract: contract, chosen: -1}
-		for _, it := range m.items {
+		for _, it := range m.capabilities {
 			capability := it.artifact
 			if capability.Implements == abstract.Name && contains(capability.Provides, contract) {
 				choice.candidates = append(choice.candidates, capability)
@@ -111,9 +111,9 @@ func (m *Model) applyCompose() {
 		}
 	}
 	abstractName := m.compose.abstract.Name
-	for i := range m.items {
-		if m.items[i].artifact.Implements == abstractName {
-			m.items[i].selected = chosen[m.items[i].artifact.Identity()]
+	for i := range m.capabilities {
+		if m.capabilities[i].artifact.Implements == abstractName {
+			m.capabilities[i].selected = chosen[m.capabilities[i].artifact.Identity()]
 		}
 	}
 }
