@@ -52,9 +52,12 @@ func (m Model) startWizard() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// newComposition builds the composition screen for one abstract skill,
-// pre-selecting any capability already chosen.
+// newComposition builds the composition screen for one abstract skill. When the
+// manifest recorded bindings for it (a reopened project), those are
+// authoritative per contract — honoring an explicit "no implementation";
+// otherwise it falls back to whichever capability is already selected.
 func (m Model) newComposition(abstract artifact.Artifact) *composeView {
+	wanted := m.priorBindings[abstract.Identity()]
 	view := &composeView{abstract: abstract}
 	for _, contract := range abstract.Contracts {
 		choice := contractChoice{contract: contract, chosen: -1}
@@ -62,7 +65,7 @@ func (m Model) newComposition(abstract artifact.Artifact) *composeView {
 			capability := it.artifact
 			if capability.Implements == abstract.Name && contains(capability.Provides, contract) {
 				choice.candidates = append(choice.candidates, capability)
-				if it.selected {
+				if picksCandidate(wanted, contract, capability.Name, it.selected) {
 					choice.chosen = len(choice.candidates) - 1
 				}
 			}
@@ -70,6 +73,16 @@ func (m Model) newComposition(abstract artifact.Artifact) *composeView {
 		view.contracts = append(view.contracts, choice)
 	}
 	return view
+}
+
+// picksCandidate decides whether a candidate is the chosen one for a contract.
+// With recorded bindings it matches by name (an absent contract stays unbound);
+// without them it falls back to whether the capability is already selected.
+func picksCandidate(wanted map[string]string, contract, capability string, selected bool) bool {
+	if wanted != nil {
+		return wanted[contract] == capability
+	}
+	return selected
 }
 
 // handleComposeKey handles keys on a composition step: navigate contracts, cycle

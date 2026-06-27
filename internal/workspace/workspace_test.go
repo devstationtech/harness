@@ -70,7 +70,7 @@ func TestApplyWritesManifestAndAgentsFile(t *testing.T) {
 	}
 
 	// @When the selection is applied
-	if err := Apply(projectRoot, selected, nil); err != nil {
+	if err := Apply(projectRoot, selected, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -121,7 +121,7 @@ func TestRenderAgentsFileUsesRelativePathForLocal(t *testing.T) {
 	}
 
 	// @When AGENTS.md is rendered
-	out, err := RenderAgentsFile(projectRoot, selected)
+	out, err := RenderAgentsFile(projectRoot, selected, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -143,8 +143,11 @@ func TestRenderAgentsFileComposesAbstractAndCapability(t *testing.T) {
 		{Kind: artifact.KindSkill, Name: "lld-ts", Description: "ts", Source: artifact.SourceShared, EntryPath: capabilityEntry, Implements: "lld", Provides: []string{"domain"}, Stack: "typescript"},
 	}
 
-	// @When AGENTS.md is rendered
-	out, err := RenderAgentsFile(projectRoot, selected)
+	// @When AGENTS.md is rendered with domain bound to lld-ts and persistence left unset
+	bindings := map[artifact.Identity]map[string]string{
+		{Kind: artifact.KindSkill, Name: "lld"}: {"domain": "lld-ts"},
+	}
+	out, err := RenderAgentsFile(projectRoot, selected, bindings)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -8,7 +8,6 @@ import (
 
 	"github.com/devstationtech/harness/internal/artifact"
 	"github.com/devstationtech/harness/internal/assets"
-	"github.com/devstationtech/harness/internal/compose"
 	"github.com/devstationtech/harness/internal/config"
 )
 
@@ -53,35 +52,39 @@ var agentsTemplate = template.Must(
 // RenderAgentsFile renders AGENTS.md for the given selected artifacts. Paths are
 // made relative to projectRoot when possible (local artifacts) and kept absolute
 // otherwise (shared artifacts referenced in place).
-func RenderAgentsFile(projectRoot string, selected []artifact.Artifact) ([]byte, error) {
+func RenderAgentsFile(projectRoot string, selected []artifact.Artifact, bindings map[artifact.Identity]map[string]string) ([]byte, error) {
 	byIdentity := make(map[artifact.Identity]artifact.Artifact, len(selected))
 	for _, a := range selected {
 		byIdentity[a.Identity()] = a
 	}
 
-	// Compose: abstract skills and the capabilities bound to them render in the
-	// compositions section and are hidden from the flat tables.
+	// Abstract skills and the capabilities bound to them render in the
+	// compositions section and are hidden from the flat tables. Bindings are the
+	// user's explicit choices — a contract with no binding stays unimplemented.
 	hidden := make(map[artifact.Identity]bool)
 	var compositions []compositionView
-	for _, composition := range compose.Bind(selected) {
-		abstract := byIdentity[composition.Abstract]
-		hidden[composition.Abstract] = true
-		bound := make(map[string]artifact.Identity)
-		for _, binding := range composition.Bindings {
-			bound[binding.Contract] = binding.Capability
-			hidden[binding.Capability] = true
+	for _, a := range selected {
+		if !a.IsAbstract() {
+			continue
 		}
+		hidden[a.Identity()] = true
+		bound := bindings[a.Identity()]
 		view := compositionView{
-			Abstract: abstract.Name,
-			Path:     displayPath(projectRoot, abstract.EntryPath),
-			Complete: composition.Complete(),
+			Abstract: a.Name,
+			Path:     displayPath(projectRoot, a.EntryPath),
+			Complete: true,
 		}
-		for _, contract := range abstract.Contracts {
+		for _, contract := range a.Contracts {
 			line := contractLine{Contract: contract}
-			if id, ok := bound[contract]; ok {
-				capability := byIdentity[id]
-				line.Capability = capability.Name
-				line.Path = displayPath(projectRoot, capability.EntryPath)
+			if name := bound[contract]; name != "" {
+				capabilityID := artifact.Identity{Kind: artifact.KindSkill, Name: name}
+				line.Capability = name
+				if capability, ok := byIdentity[capabilityID]; ok {
+					line.Path = displayPath(projectRoot, capability.EntryPath)
+					hidden[capabilityID] = true
+				}
+			} else {
+				view.Complete = false
 			}
 			view.Contracts = append(view.Contracts, line)
 		}

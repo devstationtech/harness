@@ -102,8 +102,9 @@ func Run(out io.Writer, version string) error {
 		return err
 	}
 	preselected := preselectedSet(manifest.Identities())
+	priorBindings := manifestBindings(manifest)
 
-	result, err := tui.Run(cat.All(), preselected, version, len(cat.Issues()))
+	result, err := tui.Run(cat.All(), preselected, priorBindings, version, len(cat.Issues()))
 	if err != nil {
 		return err
 	}
@@ -119,7 +120,7 @@ func Run(out io.Writer, version string) error {
 	if err != nil {
 		return err
 	}
-	if err := workspace.Apply(projectRoot, resolved, digests); err != nil {
+	if err := workspace.Apply(projectRoot, resolved, digests, result.Bindings); err != nil {
 		return err
 	}
 	printSaveSummary(out, projectRoot, resolved)
@@ -206,6 +207,18 @@ func preselectedSet(ids []artifact.Identity) map[artifact.Identity]bool {
 		set[id] = true
 	}
 	return set
+}
+
+// manifestBindings extracts the recorded contract→capability bindings per
+// abstract skill from a manifest, keyed by identity.
+func manifestBindings(manifest workspace.Manifest) map[artifact.Identity]map[string]string {
+	out := make(map[artifact.Identity]map[string]string)
+	for _, selection := range manifest.Selections {
+		if len(selection.Bindings) > 0 {
+			out[artifact.Identity{Kind: selection.Kind, Name: selection.Name}] = selection.Bindings
+		}
+	}
+	return out
 }
 
 func printSaveSummary(out io.Writer, projectRoot string, selected []artifact.Artifact) {

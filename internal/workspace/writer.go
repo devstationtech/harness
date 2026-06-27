@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 
 	"github.com/devstationtech/harness/internal/artifact"
-	"github.com/devstationtech/harness/internal/compose"
 	"github.com/devstationtech/harness/internal/config"
 )
 
@@ -14,13 +13,15 @@ const filePermission = 0o644
 // Apply persists a project's selection: it writes the manifest at the project
 // root and (re)generates AGENTS.md. digests maps a selection's identity to the
 // content digest of its vendored copy (empty for artifacts referenced in place).
+// bindings maps an abstract skill's identity to its chosen capability per
+// contract, recorded verbatim — so an explicit "no implementation" is preserved,
+// not re-derived.
 //
 // Shared and local artifacts are referenced in place by AGENTS.md; only remote
 // artifacts are vendored (by the caller) before Apply runs. Per-kind directories
 // come into existence on demand when a project-local artifact is authored or
 // vendored, so an empty .agents/skills/ never clutters a project.
-func Apply(projectRoot string, selected []artifact.Artifact, digests map[artifact.Identity]string) error {
-	bindings := bindingsByAbstract(selected)
+func Apply(projectRoot string, selected []artifact.Artifact, digests map[artifact.Identity]string, bindings map[artifact.Identity]map[string]string) error {
 	selections := make([]Selection, 0, len(selected))
 	for _, a := range selected {
 		selection := SelectionOf(a, digests[a.Identity()])
@@ -34,25 +35,11 @@ func Apply(projectRoot string, selected []artifact.Artifact, digests map[artifac
 	}
 	removeStale(projectRoot)
 
-	agentsBytes, err := RenderAgentsFile(projectRoot, selected)
+	agentsBytes, err := RenderAgentsFile(projectRoot, selected, bindings)
 	if err != nil {
 		return err
 	}
 	return os.WriteFile(config.AgentsFilePath(projectRoot), agentsBytes, filePermission)
-}
-
-// bindingsByAbstract composes the selected set and returns, per abstract skill
-// identity, its contract→capability bindings for recording in the manifest.
-func bindingsByAbstract(selected []artifact.Artifact) map[artifact.Identity]map[string]string {
-	out := make(map[artifact.Identity]map[string]string)
-	for _, composition := range compose.Bind(selected) {
-		bound := make(map[string]string, len(composition.Bindings))
-		for _, binding := range composition.Bindings {
-			bound[binding.Contract] = binding.Capability.Name
-		}
-		out[composition.Abstract] = bound
-	}
-	return out
 }
 
 // removeStale best-effort removes manifest and lock files from the pre-v2

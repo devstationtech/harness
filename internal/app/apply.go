@@ -70,7 +70,7 @@ func Apply(out io.Writer) error {
 		digests[materialized.Identity()] = digest
 	}
 
-	if err := workspace.Apply(projectRoot, resolved, digests); err != nil {
+	if err := workspace.Apply(projectRoot, resolved, digests, manifestBindings(manifest)); err != nil {
 		return err
 	}
 	fmt.Fprintf(out, "Applied %d selection(s).\n", len(resolved))

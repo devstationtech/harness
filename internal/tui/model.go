@@ -76,6 +76,10 @@ type Model struct {
 	step         step
 	compositions []*composeView
 	composeIndex int
+	// priorBindings are the manifest's recorded bindings (abstract identity →
+	// contract → capability name), used to pre-fill the wizard on reopen so an
+	// explicit "no implementation" survives a round trip.
+	priorBindings map[artifact.Identity]map[string]string
 }
 
 // New builds a selection model from the merged catalog. Artifacts whose identity
@@ -130,6 +134,24 @@ func (m Model) Selected() []artifact.Artifact {
 		if it.selected && selectedAbstracts[it.artifact.Implements] {
 			out = append(out, it.artifact)
 		}
+	}
+	return out
+}
+
+// Bindings returns, per composed abstract skill, the capability chosen for each
+// contract exactly as the user set it — a contract left without an
+// implementation is omitted. These explicit choices are the source of truth for
+// the manifest and AGENTS.md, so an unset contract is never re-bound.
+func (m Model) Bindings() map[artifact.Identity]map[string]string {
+	out := make(map[artifact.Identity]map[string]string)
+	for _, view := range m.compositions {
+		bound := make(map[string]string)
+		for _, choice := range view.contracts {
+			if choice.chosen >= 0 {
+				bound[choice.contract] = choice.candidates[choice.chosen].Name
+			}
+		}
+		out[view.abstract.Identity()] = bound
 	}
 	return out
 }

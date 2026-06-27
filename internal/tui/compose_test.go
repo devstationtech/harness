@@ -117,6 +117,31 @@ func TestApplyViewSelectsOnlyChosenCapabilities(t *testing.T) {
 	}
 }
 
+func TestPriorBindingsHonorExplicitNone(t *testing.T) {
+	// @Given a reopened project: the capability provides two contracts but the
+	// manifest only bound it to one (the other was left "no implementation")
+	m := New([]artifact.Artifact{
+		abstract("lld", "domain", "command"),
+		capability("lld-ts", "lld", "domain", "command"),
+	}, selectedID("lld"), "v", 0)
+	m.priorBindings = map[artifact.Identity]map[string]string{
+		{Kind: artifact.KindSkill, Name: "lld"}: {"domain": "lld-ts"},
+	}
+
+	// @When the wizard rebuilds the composition
+	next, _ := m.startWizard()
+	m = next.(Model)
+	view := m.compositions[0]
+
+	// @Then domain is pre-chosen and command stays unbound (none), not re-bound
+	if view.contracts[0].contract != "domain" || view.contracts[0].chosen != 0 {
+		t.Errorf("domain not pre-chosen: %+v", view.contracts[0])
+	}
+	if view.contracts[1].contract != "command" || view.contracts[1].chosen != -1 {
+		t.Errorf("command should stay unbound, got %+v", view.contracts[1])
+	}
+}
+
 func TestSelectedPrunesOrphanCapability(t *testing.T) {
 	// @Given an abstract and its capability both selected (a configured project)
 	m := New([]artifact.Artifact{

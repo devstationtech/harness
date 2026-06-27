@@ -76,6 +76,7 @@ func Upgrade(out io.Writer) error {
 			return err
 		}
 		next := workspace.SelectionOf(found, digest)
+		next.Bindings = sel.Bindings // preserve composition bindings across upgrade
 		if next.Digest != sel.Digest {
 			changed++
 			fmt.Fprintf(out, "  %s/%s: %s → %s\n", sel.Source, sel.Name, versionLabel(sel.Version), versionLabel(next.Version))
