@@ -92,7 +92,10 @@ type Artifact struct {
 	Kind        Kind
 	Name        string
 	Description string
-	Source      Source
+	// Version is the artifact's package version (SemVer), or "" when the source
+	// declares none ("unversioned").
+	Version string
+	Source  Source
 	// Origin is the name of the source the artifact resolved from ("local",
 	// "home", or a configured remote source name). Unlike Source, which is the
 	// coarse shared/local class, Origin identifies the exact source — needed to
