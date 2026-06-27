@@ -93,6 +93,11 @@ type Artifact struct {
 	Name        string
 	Description string
 	Source      Source
+	// Origin is the name of the source the artifact resolved from ("local",
+	// "home", or a configured remote source name). Unlike Source, which is the
+	// coarse shared/local class, Origin identifies the exact source — needed to
+	// vendor and lock artifacts that come from a remote repository.
+	Origin string
 	// Directory is the absolute path to the artifact directory.
 	Directory string
 	// EntryPath is the absolute path to the entry document (SKILL.md, ...).

@@ -7,6 +7,13 @@ package source
 
 import "github.com/devstationtech/harness/internal/artifact"
 
+const (
+	// LocalName is the source name of a project's own .agents directory.
+	LocalName = "local"
+	// HomeName is the source name of the shared library (~/.harness).
+	HomeName = "home"
+)
+
 // Source resolves the artifacts available at one location. Implementations are
 // constructed ready to use (see NewLocalDirectory) and carry no global state.
 type Source interface {

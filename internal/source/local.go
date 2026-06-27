@@ -93,6 +93,7 @@ func (d LocalDirectory) read(kind artifact.Kind, dirName, directory string) (art
 		Name:        front.Name,
 		Description: front.Description,
 		Source:      d.tag,
+		Origin:      d.name,
 		Directory:   directory,
 		EntryPath:   entryPath,
 		Metadata:    front.Metadata,
