@@ -24,7 +24,6 @@ const (
 	logoCols    = 58
 	headerRows  = logoLines // wide layout: the wordmark sets the height
 	compactRows = 2         // title + version chip (narrow layout)
-	tabRows     = 1         // the category tab bar above the list
 	footerRows  = 1
 
 	// The titled box around the list: top+bottom border + top/bottom padding
@@ -382,7 +381,7 @@ func (m Model) headerHeight() int {
 // contentHeight is the number of list rows available inside the titled box,
 // between the header and the footer.
 func (m Model) contentHeight() int {
-	h := m.height - 2*vPad - m.headerHeight() - tabRows - footerRows - boxChromeRows
+	h := m.height - 2*vPad - m.headerHeight() - footerRows - boxChromeRows
 	if h < 1 {
 		return 1
 	}
@@ -435,8 +434,7 @@ func (m Model) View() string {
 		doc = lipgloss.JoinVertical(
 			lipgloss.Left,
 			m.renderHeader(inner),
-			m.renderTabBar(inner),
-			m.renderTitledBox(m.activeRoleHint(), inner, content),
+			m.renderTitledBox(m.tabsTitle(), inner, content),
 			m.renderFooter(inner),
 		)
 	}
@@ -550,9 +548,10 @@ func (m Model) listWindow(width int) []string {
 	return rows
 }
 
-// renderTitledBox draws content inside a bordered box with the title embedded in
-// the top border as a chip — mirroring the devstation TitledBox primitive. width
-// is the box's outer width; each content line must be (width-boxChromeCols) wide.
+// renderTitledBox draws content inside a bordered box with title embedded in the
+// top border — mirroring the devstation TitledBox primitive. title is already
+// rendered (a chip, or the category tabs). width is the box's outer width; each
+// content line must be (width-boxChromeCols) wide.
 func (m Model) renderTitledBox(title string, width int, content []string) string {
 	border := m.styles.divider
 	interior := width - 2
@@ -560,12 +559,11 @@ func (m Model) renderTitledBox(title string, width int, content []string) string
 		interior = 0
 	}
 
-	titleChip := m.styles.chip.Render(title)
-	dashes := interior - lipgloss.Width(titleChip)
+	dashes := interior - lipgloss.Width(title)
 	if dashes < 0 {
 		dashes = 0
 	}
-	top := border.Render("┌") + titleChip + border.Render(strings.Repeat("─", dashes)+"┐")
+	top := border.Render("┌") + title + border.Render(strings.Repeat("─", dashes)+"┐")
 	blank := border.Render("│") + m.paint(interior, "") + border.Render("│")
 	bottom := border.Render("└" + strings.Repeat("─", interior) + "┘")
 
@@ -617,34 +615,26 @@ func (m Model) bodyLines(inner int) []string {
 	return lines
 }
 
-// renderTabBar draws the category tabs above the list: one label per non-empty
-// kind with its selected/total count, the active tab accented and underlined.
-func (m Model) renderTabBar(inner int) string {
-	var labels []string
-	for _, kind := range m.tabKinds() {
+// tabsTitle renders the category tabs to embed in the list box's top border: one
+// label per non-empty kind with its selected/total count, the active tab
+// accented and underlined.
+func (m Model) tabsTitle() string {
+	var builder strings.Builder
+	builder.WriteString(m.paint(1, "")) // leading space inside the border
+	for i, kind := range m.tabKinds() {
+		if i > 0 {
+			builder.WriteString(m.paint(2, "")) // gap between tabs
+		}
 		selected, total := m.sectionCounts(kind)
 		label := fmt.Sprintf("%s %d/%d", kind.Title(), selected, total)
 		if kind == m.activeKind {
-			labels = append(labels, m.styles.tabActive.Render(label))
+			builder.WriteString(m.styles.tabActive.Render(label))
 		} else {
-			labels = append(labels, m.styles.tabInactive.Render(label))
+			builder.WriteString(m.styles.tabInactive.Render(label))
 		}
 	}
-	return m.paint(inner, strings.Join(labels, m.styles.base.Render("    ")))
-}
-
-// activeRoleHint labels the active tab with how its artifacts load, used as the
-// list box title.
-func (m Model) activeRoleHint() string {
-	role := map[artifact.Kind]string{
-		artifact.KindRule:  "load ALWAYS",
-		artifact.KindSkill: "load on NEED",
-		artifact.KindAgent: "delegate on NEED",
-	}[m.activeKind]
-	if role == "" {
-		return m.activeKind.Title()
-	}
-	return m.activeKind.Title() + " · " + role
+	builder.WriteString(m.paint(1, "")) // trailing space
+	return builder.String()
 }
 
 func (m Model) sectionCounts(kind artifact.Kind) (selected, total int) {

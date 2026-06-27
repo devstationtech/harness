@@ -177,7 +177,7 @@ func (m Model) renderCompose(inner int) string {
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
 		m.renderHeader(inner),
-		m.renderTitledBox(title, inner, content),
+		m.renderTitledBox(m.styles.chip.Render(title), inner, content),
 		m.footerLine(inner, "↑/↓ contract · ←/→ choose · enter next · esc back · ctrl+c quit"),
 	)
 }
@@ -253,7 +253,7 @@ func (m Model) renderConfirm(inner int) string {
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
 		m.renderHeader(inner),
-		m.renderTitledBox("review", inner, content),
+		m.renderTitledBox(m.styles.chip.Render("review"), inner, content),
 		m.footerLine(inner, "enter save · b back to start · q quit"),
 	)
 }
