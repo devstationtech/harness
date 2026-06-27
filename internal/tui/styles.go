@@ -2,23 +2,37 @@ package tui
 
 import "github.com/charmbracelet/lipgloss"
 
-// palette keeps the interface calm and consistent: one accent, restrained
-// neutrals, and two quiet hues to distinguish artifact sources.
+// Palette mirrors the devstation CLI (dark theme): cyan primary, gray neutrals,
+// #666666 dividers, #323232/#aeaeae chips, and constant green/yellow/red status.
+// The whole interface renders against a dark-gray canvas, so every text style
+// also carries the canvas background to keep the fill uniform.
 var (
-	accent    = lipgloss.AdaptiveColor{Light: "#4C5BD4", Dark: "#8A93FF"}
-	textColor = lipgloss.AdaptiveColor{Light: "#1A1A1A", Dark: "#EDEDED"}
-	muted     = lipgloss.AdaptiveColor{Light: "#7A7A7A", Dark: "#8A8A8A"}
-	faint     = lipgloss.AdaptiveColor{Light: "#A0A0A0", Dark: "#6A6A6A"}
-	sharedHue = lipgloss.AdaptiveColor{Light: "#2C7A7B", Dark: "#5EC8C9"}
-	localHue  = lipgloss.AdaptiveColor{Light: "#B7791F", Dark: "#E0A85A"}
-	success   = lipgloss.AdaptiveColor{Light: "#2F855A", Dark: "#68D391"}
+	canvas  = lipgloss.Color("#1e1e1e") // dark gray full-screen background
+	accent  = lipgloss.Color("14")      // cyan (devstation "primary")
+	textCol = lipgloss.Color("252")
+	muted   = lipgloss.Color("245")
+	faint   = lipgloss.Color("240")
+	border  = lipgloss.Color("#666666")
+	chipBg  = lipgloss.Color("#323232")
+	chipFg  = lipgloss.Color("#aeaeae")
+	success = lipgloss.Color("10")
+	warning = lipgloss.Color("11")
+	sharedC = lipgloss.Color("39") // calm blue for the "shared" source
+)
+
+const (
+	hPad = 2 // horizontal canvas padding
+	vPad = 1 // vertical canvas padding
 )
 
 type styles struct {
-	app         lipgloss.Style
+	base        lipgloss.Style
+	logo        lipgloss.Style
 	title       lipgloss.Style
 	subtitle    lipgloss.Style
+	chip        lipgloss.Style
 	section     lipgloss.Style
+	sectionHint lipgloss.Style
 	cursor      lipgloss.Style
 	name        lipgloss.Style
 	nameActive  lipgloss.Style
@@ -28,28 +42,42 @@ type styles struct {
 	badgeShared lipgloss.Style
 	badgeLocal  lipgloss.Style
 	override    lipgloss.Style
+	divider     lipgloss.Style
 	footer      lipgloss.Style
 	count       lipgloss.Style
+	scrollInfo  lipgloss.Style
+	scrollThumb lipgloss.Style
+	scrollTrack lipgloss.Style
+	warn        lipgloss.Style
 	empty       lipgloss.Style
 }
 
 func newStyles() styles {
+	on := func() lipgloss.Style { return lipgloss.NewStyle().Background(canvas) }
 	return styles{
-		app:         lipgloss.NewStyle().Padding(1, 2),
-		title:       lipgloss.NewStyle().Bold(true).Foreground(accent),
-		subtitle:    lipgloss.NewStyle().Foreground(muted),
-		section:     lipgloss.NewStyle().Bold(true).Foreground(textColor).MarginTop(1),
-		cursor:      lipgloss.NewStyle().Foreground(accent).Bold(true),
-		name:        lipgloss.NewStyle().Foreground(textColor),
-		nameActive:  lipgloss.NewStyle().Foreground(accent).Bold(true),
-		checkOn:     lipgloss.NewStyle().Foreground(success).Bold(true),
-		checkOff:    lipgloss.NewStyle().Foreground(faint),
-		description: lipgloss.NewStyle().Foreground(muted),
-		badgeShared: lipgloss.NewStyle().Foreground(sharedHue),
-		badgeLocal:  lipgloss.NewStyle().Foreground(localHue),
-		override:    lipgloss.NewStyle().Foreground(localHue).Italic(true),
-		footer:      lipgloss.NewStyle().Foreground(faint).MarginTop(1),
-		count:       lipgloss.NewStyle().Foreground(success),
-		empty:       lipgloss.NewStyle().Foreground(muted).MarginTop(1),
+		base:        on().Foreground(textCol),
+		logo:        on().Foreground(accent).Bold(true),
+		title:       on().Foreground(textCol).Bold(true),
+		subtitle:    on().Foreground(muted),
+		chip:        lipgloss.NewStyle().Background(chipBg).Foreground(chipFg).Padding(0, 1),
+		section:     on().Foreground(accent).Bold(true),
+		sectionHint: on().Foreground(muted),
+		cursor:      on().Foreground(accent).Bold(true),
+		name:        on().Foreground(textCol),
+		nameActive:  on().Foreground(accent).Bold(true),
+		checkOn:     on().Foreground(success).Bold(true),
+		checkOff:    on().Foreground(faint),
+		description: on().Foreground(muted),
+		badgeShared: on().Foreground(sharedC),
+		badgeLocal:  on().Foreground(warning),
+		override:    on().Foreground(warning).Italic(true),
+		divider:     on().Foreground(border),
+		footer:      on().Foreground(faint),
+		count:       on().Foreground(success),
+		scrollInfo:  on().Foreground(faint),
+		scrollThumb: on().Foreground(accent),
+		scrollTrack: on().Foreground(border),
+		warn:        on().Foreground(warning),
+		empty:       on().Foreground(muted),
 	}
 }

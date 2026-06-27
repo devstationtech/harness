@@ -12,10 +12,14 @@ type Result struct {
 	Selected  []artifact.Artifact
 }
 
-// Run launches the selection screen over the merged catalog and blocks until the
-// user saves or quits.
-func Run(artifacts []artifact.Artifact, preselected map[artifact.Identity]bool) (Result, error) {
-	program := tea.NewProgram(New(artifacts, preselected))
+// Run launches the full-screen selection UI over the merged catalog and blocks
+// until the user saves or quits. warnings is the number of artifacts that were
+// skipped while loading, surfaced as a footer indicator.
+func Run(artifacts []artifact.Artifact, preselected map[artifact.Identity]bool, version string, warnings int) (Result, error) {
+	program := tea.NewProgram(
+		New(artifacts, preselected, version, warnings),
+		tea.WithAltScreen(),
+	)
 	finalModel, err := program.Run()
 	if err != nil {
 		return Result{}, err
