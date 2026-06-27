@@ -13,7 +13,7 @@ import "github.com/charmbracelet/lipgloss"
 // Tango "bright" palette the devstation theme intends.
 var (
 	canvas  = lipgloss.Color("#1e1e1e") // dark gray full-screen background
-	accent  = lipgloss.Color("#34e2e2") // cyan (devstation "primary")
+	accent  = lipgloss.Color("#fe8019") // orange (primary accent)
 	textCol = lipgloss.Color("#d0d0d0")
 	muted   = lipgloss.Color("#8a8a8a")
 	faint   = lipgloss.Color("#585858")
