@@ -6,7 +6,9 @@ import (
 	"strings"
 
 	"github.com/devstationtech/harness/internal/artifact"
+	"github.com/devstationtech/harness/internal/config"
 	"github.com/devstationtech/harness/internal/vendor"
+	"github.com/devstationtech/harness/internal/workspace"
 )
 
 // Vendor copies a shared or remote artifact into the project's .agents directory
@@ -39,10 +41,36 @@ func Vendor(out io.Writer, args []string) error {
 		return nil
 	}
 
-	if _, _, err := vendor.Vendor(resolved, projectRoot); err != nil {
+	if err := vendorInto(out, projectRoot, resolved); err != nil {
 		return err
 	}
-	fmt.Fprintf(out, "Vendored %s/%s into .agents — it now overrides the shared one.\n", kindText, name)
-	fmt.Fprintln(out, "Run `harness` (or `harness apply`) to update AGENTS.md.")
+	// Localizing an abstract pulls its bound capabilities along, so the
+	// composition is complete for anyone who clones the project. The bindings
+	// come from the project manifest.
+	if resolved.IsAbstract() {
+		manifest, err := workspace.LoadManifest(config.ManifestPath(projectRoot))
+		if err != nil {
+			return err
+		}
+		for _, capabilityName := range manifestBindings(manifest)[resolved.Identity()] {
+			capability, ok := cat.Find(artifact.Identity{Kind: artifact.KindSkill, Name: capabilityName})
+			if !ok || capability.Source == artifact.SourceLocal {
+				continue
+			}
+			if err := vendorInto(out, projectRoot, capability); err != nil {
+				return err
+			}
+		}
+	}
+	fmt.Fprintln(out, "It now overrides the shared one. Run `harness` (or `harness apply`) to update AGENTS.md.")
+	return nil
+}
+
+// vendorInto copies one artifact into the project's .agents and reports it.
+func vendorInto(out io.Writer, projectRoot string, a artifact.Artifact) error {
+	if _, _, err := vendor.Vendor(a, projectRoot); err != nil {
+		return err
+	}
+	fmt.Fprintf(out, "Vendored %s/%s into .agents.\n", a.Kind, a.Name)
 	return nil
 }

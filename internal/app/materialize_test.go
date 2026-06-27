@@ -50,6 +50,27 @@ func TestMaterializeVendorsLocalizedSharedArtifact(t *testing.T) {
 	}
 }
 
+func TestExpandLocalizedPullsBoundCapabilities(t *testing.T) {
+	// @Given a localized abstract bound to two distinct capabilities
+	abstractID := artifact.Identity{Kind: artifact.KindSkill, Name: "lld"}
+	bindings := map[artifact.Identity]map[string]string{
+		abstractID: {"domain": "lld-ts", "command": "lld-ts", "query": "lld-go"},
+	}
+
+	// @When the localize set is expanded
+	set := expandLocalized([]artifact.Identity{abstractID}, bindings)
+
+	// @Then it includes the abstract and every bound capability, deduplicated
+	for _, name := range []string{"lld", "lld-ts", "lld-go"} {
+		if !set[artifact.Identity{Kind: artifact.KindSkill, Name: name}] {
+			t.Errorf("expected %q in the localized set: %v", name, set)
+		}
+	}
+	if len(set) != 3 {
+		t.Errorf("expected 3 entries (abstract + 2 distinct caps), got %d", len(set))
+	}
+}
+
 func TestMaterializeLeavesNonLocalizedSharedReferenced(t *testing.T) {
 	// @Given a shared artifact that is not localized
 	a := sharedSkill(t, "bar")

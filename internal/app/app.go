@@ -115,11 +115,9 @@ func Run(out io.Writer, version string) error {
 	}
 
 	// Vendor any selections that come from a remote source or that the user
-	// asked to localize, then persist the root manifest and AGENTS.md.
-	localized := make(map[artifact.Identity]bool, len(result.Localized))
-	for _, id := range result.Localized {
-		localized[id] = true
-	}
+	// asked to localize (an abstract pulls its bound capabilities along), then
+	// persist the root manifest and AGENTS.md.
+	localized := expandLocalized(result.Localized, result.Bindings)
 	resolved, digests, err := materialize(result.Selected, projectRoot, home, localized)
 	if err != nil {
 		return err
@@ -145,6 +143,10 @@ func materialize(selected []artifact.Artifact, projectRoot, home string, localiz
 	final := make([]artifact.Artifact, 0, len(selected))
 
 	for _, a := range selected {
+		if a.Source == artifact.SourceLocal {
+			final = append(final, a) // already under .agents; never re-copy onto itself
+			continue
+		}
 		_, isRemote := remotes.Find(a.Origin)
 		if !isRemote && !localized[a.Identity()] {
 			final = append(final, a)
@@ -158,6 +160,21 @@ func materialize(selected []artifact.Artifact, projectRoot, home string, localiz
 		digests[vendored.Identity()] = digest
 	}
 	return final, digests, nil
+}
+
+// expandLocalized turns the user's localize requests into the full set to
+// vendor: localizing an abstract skill also localizes the capabilities its
+// bindings point to, so the composition is complete for anyone who clones the
+// project.
+func expandLocalized(requested []artifact.Identity, bindings map[artifact.Identity]map[string]string) map[artifact.Identity]bool {
+	set := make(map[artifact.Identity]bool, len(requested))
+	for _, id := range requested {
+		set[id] = true
+		for _, capability := range bindings[id] {
+			set[artifact.Identity{Kind: artifact.KindSkill, Name: capability}] = true
+		}
+	}
+	return set
 }
 
 // loadCatalog resolves and merges every source for the current project and
