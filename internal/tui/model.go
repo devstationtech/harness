@@ -24,6 +24,7 @@ const (
 	logoCols    = 58
 	headerRows  = logoLines // wide layout: the wordmark sets the height
 	compactRows = 2         // title + version chip (narrow layout)
+	tabRows     = 1         // the category tab bar above the list
 	footerRows  = 1
 
 	// The titled box around the list: top+bottom border + top/bottom padding
@@ -66,9 +67,10 @@ type Model struct {
 	// capabilities are hidden from the selection list — they implement an
 	// abstract skill and are chosen on its composition screen, not on their own.
 	capabilities []item
-	nameWidth    int // shared width of the name column (table alignment)
-	cursor       int
-	offset       int // first visible visual-line (scroll position)
+	nameWidth    int           // shared width of the name column (table alignment)
+	activeKind   artifact.Kind // the selected tab/category
+	cursor       int           // index into items, always within the active tab
+	offset       int           // first visible visual-line (scroll position)
 	width        int
 	height       int
 	warnings     int // count of artifacts skipped while loading
@@ -106,7 +108,7 @@ func New(artifacts []artifact.Artifact, preselected map[artifact.Identity]bool, 
 	if nameWidth > maxNameWidth {
 		nameWidth = maxNameWidth
 	}
-	return Model{
+	m := Model{
 		styles:       newStyles(),
 		version:      version,
 		items:        items,
@@ -114,6 +116,40 @@ func New(artifacts []artifact.Artifact, preselected map[artifact.Identity]bool, 
 		nameWidth:    nameWidth,
 		warnings:     warnings,
 	}
+	// Start on the first non-empty tab, with the cursor on its first row.
+	if kinds := m.tabKinds(); len(kinds) > 0 {
+		m.activeKind = kinds[0]
+		if idx := m.activeIndices(); len(idx) > 0 {
+			m.cursor = idx[0]
+		}
+	}
+	return m
+}
+
+// tabKinds returns the kinds that have at least one (visible) item, in canonical
+// order — one tab each. New kinds (e.g. MCP) appear automatically once present.
+func (m Model) tabKinds() []artifact.Kind {
+	var kinds []artifact.Kind
+	for _, kind := range artifact.Kinds() {
+		for _, it := range m.items {
+			if it.artifact.Kind == kind {
+				kinds = append(kinds, kind)
+				break
+			}
+		}
+	}
+	return kinds
+}
+
+// activeIndices returns the indices into items of the active tab's artifacts.
+func (m Model) activeIndices() []int {
+	var idx []int
+	for i, it := range m.items {
+		if it.artifact.Kind == m.activeKind {
+			idx = append(idx, i)
+		}
+	}
+	return idx
 }
 
 // Confirmed reports whether the user chose to save (Enter) rather than quit.
@@ -204,11 +240,17 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.moveCursor(-1)
 	case "down", "j":
 		m.moveCursor(1)
+	case "left", "h", "shift+tab":
+		m.switchTab(-1)
+	case "right", "l", "tab":
+		m.switchTab(1)
 	case "g", "home":
-		m.cursor = 0
+		if idx := m.activeIndices(); len(idx) > 0 {
+			m.cursor = idx[0]
+		}
 	case "G", "end":
-		if len(m.items) > 0 {
-			m.cursor = len(m.items) - 1
+		if idx := m.activeIndices(); len(idx) > 0 {
+			m.cursor = idx[len(idx)-1]
 		}
 	case " ", "x":
 		if len(m.items) > 0 {
@@ -242,15 +284,39 @@ func (m *Model) openDetail() {
 }
 
 func (m *Model) moveCursor(delta int) {
-	if len(m.items) == 0 {
+	idx := m.activeIndices()
+	if len(idx) == 0 {
 		return
 	}
-	m.cursor += delta
-	if m.cursor < 0 {
-		m.cursor = 0
+	pos := 0
+	for p, i := range idx {
+		if i == m.cursor {
+			pos = p
+			break
+		}
 	}
-	if m.cursor >= len(m.items) {
-		m.cursor = len(m.items) - 1
+	m.cursor = idx[clampIndex(pos+delta, len(idx))]
+}
+
+// switchTab moves to the next or previous non-empty tab, wrapping, and puts the
+// cursor on its first row.
+func (m *Model) switchTab(delta int) {
+	kinds := m.tabKinds()
+	if len(kinds) == 0 {
+		return
+	}
+	cur := 0
+	for i, kind := range kinds {
+		if kind == m.activeKind {
+			cur = i
+			break
+		}
+	}
+	cur = ((cur+delta)%len(kinds) + len(kinds)) % len(kinds)
+	m.activeKind = kinds[cur]
+	m.offset = 0
+	if idx := m.activeIndices(); len(idx) > 0 {
+		m.cursor = idx[0]
 	}
 }
 
@@ -282,21 +348,17 @@ func (m Model) Localized() []artifact.Identity {
 	return out
 }
 
-// toggleSection flips every item that shares the kind under the cursor.
+// toggleSection flips every item in the active tab (all on if any is off).
 func (m *Model) toggleSection() {
-	if len(m.items) == 0 {
-		return
-	}
-	kind := m.items[m.cursor].artifact.Kind
 	anyOff := false
 	for _, it := range m.items {
-		if it.artifact.Kind == kind && !it.selected {
+		if it.artifact.Kind == m.activeKind && !it.selected {
 			anyOff = true
 			break
 		}
 	}
 	for index := range m.items {
-		if m.items[index].artifact.Kind == kind {
+		if m.items[index].artifact.Kind == m.activeKind {
 			m.items[index].selected = anyOff
 		}
 	}
@@ -320,31 +382,21 @@ func (m Model) headerHeight() int {
 // contentHeight is the number of list rows available inside the titled box,
 // between the header and the footer.
 func (m Model) contentHeight() int {
-	h := m.height - 2*vPad - m.headerHeight() - footerRows - boxChromeRows
+	h := m.height - 2*vPad - m.headerHeight() - tabRows - footerRows - boxChromeRows
 	if h < 1 {
 		return 1
 	}
 	return h
 }
 
-// cursorVisualIndex is the row index of the cursor within the body, counting the
-// section header that precedes each kind.
+// cursorVisualIndex is the cursor's row index within the active tab's list.
 func (m Model) cursorVisualIndex() int {
-	index := 0
-	var currentKind artifact.Kind
-	first := true
-	for i, it := range m.items {
-		if first || it.artifact.Kind != currentKind {
-			currentKind = it.artifact.Kind
-			first = false
-			index++ // section header line
-		}
+	for pos, i := range m.activeIndices() {
 		if i == m.cursor {
-			return index
+			return pos
 		}
-		index++
 	}
-	return index
+	return 0
 }
 
 // ensureVisible scrolls the body so the cursor row stays within view.
@@ -383,7 +435,8 @@ func (m Model) View() string {
 		doc = lipgloss.JoinVertical(
 			lipgloss.Left,
 			m.renderHeader(inner),
-			m.renderTitledBox("artifacts", inner, content),
+			m.renderTabBar(inner),
+			m.renderTitledBox(m.activeRoleHint(), inner, content),
 			m.renderFooter(inner),
 		)
 	}
@@ -525,21 +578,9 @@ func (m Model) renderTitledBox(title string, width int, content []string) string
 	return lipgloss.JoinVertical(lipgloss.Left, rows...)
 }
 
-// bodyLineCount is the total number of body rows (section headers + items),
-// independent of width.
+// bodyLineCount is the number of rows in the active tab.
 func (m Model) bodyLineCount() int {
-	count := 0
-	var currentKind artifact.Kind
-	first := true
-	for _, it := range m.items {
-		if first || it.artifact.Kind != currentKind {
-			currentKind = it.artifact.Kind
-			first = false
-			count++
-		}
-		count++
-	}
-	return count
+	return len(m.activeIndices())
 }
 
 // scrollbar builds a ch-row vertical scrollbar: a proportional thumb over a
@@ -567,32 +608,43 @@ func (m Model) scrollbar(ch, total, offset int) []string {
 	return cells
 }
 
-// bodyLines renders every section header and row as a full-width line.
+// bodyLines renders the active tab's rows, one full-width line each.
 func (m Model) bodyLines(inner int) []string {
 	var lines []string
-	var currentKind artifact.Kind
-	first := true
-	for index, it := range m.items {
-		if first || it.artifact.Kind != currentKind {
-			currentKind = it.artifact.Kind
-			first = false
-			lines = append(lines, m.renderSection(currentKind, inner))
-		}
-		lines = append(lines, m.renderRow(index, it, inner))
+	for _, i := range m.activeIndices() {
+		lines = append(lines, m.renderRow(i, m.items[i], inner))
 	}
 	return lines
 }
 
-func (m Model) renderSection(kind artifact.Kind, inner int) string {
-	hint := map[artifact.Kind]string{
+// renderTabBar draws the category tabs above the list: one label per non-empty
+// kind with its selected/total count, the active tab accented and underlined.
+func (m Model) renderTabBar(inner int) string {
+	var labels []string
+	for _, kind := range m.tabKinds() {
+		selected, total := m.sectionCounts(kind)
+		label := fmt.Sprintf("%s %d/%d", kind.Title(), selected, total)
+		if kind == m.activeKind {
+			labels = append(labels, m.styles.tabActive.Render(label))
+		} else {
+			labels = append(labels, m.styles.tabInactive.Render(label))
+		}
+	}
+	return m.paint(inner, strings.Join(labels, m.styles.base.Render("    ")))
+}
+
+// activeRoleHint labels the active tab with how its artifacts load, used as the
+// list box title.
+func (m Model) activeRoleHint() string {
+	role := map[artifact.Kind]string{
 		artifact.KindRule:  "load ALWAYS",
 		artifact.KindSkill: "load on NEED",
 		artifact.KindAgent: "delegate on NEED",
-	}[kind]
-	selected, total := m.sectionCounts(kind)
-	head := m.styles.section.Render(kind.Title())
-	rest := m.styles.sectionHint.Render(fmt.Sprintf("  ·  %s   (%d/%d)", hint, selected, total))
-	return m.styles.base.Width(inner).MaxWidth(inner).Render(head + rest)
+	}[m.activeKind]
+	if role == "" {
+		return m.activeKind.Title()
+	}
+	return m.activeKind.Title() + " · " + role
 }
 
 func (m Model) sectionCounts(kind artifact.Kind) (selected, total int) {
@@ -649,7 +701,7 @@ func (m Model) renderRow(index int, it item, inner int) string {
 }
 
 func (m Model) renderFooter(inner int) string {
-	help := "↑/↓ move · space toggle · v localize · i info · enter continue · q quit"
+	help := "↑/↓ rows · ←/→ tabs · space select · v localize · i info · enter continue · q quit"
 	scroll := ""
 	if total := m.bodyLineCount(); total > m.contentHeight() {
 		scroll = fmt.Sprintf(

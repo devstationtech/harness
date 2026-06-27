@@ -50,6 +50,8 @@ type styles struct {
 	scrollTrack lipgloss.Style
 	warn        lipgloss.Style
 	empty       lipgloss.Style
+	tabActive   lipgloss.Style
+	tabInactive lipgloss.Style
 }
 
 func newStyles() styles {
@@ -79,5 +81,7 @@ func newStyles() styles {
 		scrollTrack: on().Foreground(border),
 		warn:        on().Foreground(warning),
 		empty:       on().Foreground(muted),
+		tabActive:   on().Foreground(accent).Bold(true).Underline(true),
+		tabInactive: on().Foreground(muted),
 	}
 }
