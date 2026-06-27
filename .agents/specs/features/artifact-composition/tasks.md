@@ -1,7 +1,7 @@
 # Artifact Composition Tasks
 
 **Design**: `.agents/specs/features/artifact-composition/design.md`
-**Status**: Draft
+**Status**: Phase 1 DONE — C1–C6 ✅. Frontmatter contracts/implements/provides/stack; `compose.Bind`; manifest bindings; AGENTS.md renders contract + linked implementations; `low-level-design` + `lld-typescript` extracted to `~/.harness` and composing with 0 unbound. Deferred: C7 composition screen (needs the in-flight TUI committed), C8 stack filtering. All `make check` green.
 
 > Self-contained Go CLI, no MCPs. Execution skill: `tlc-spec-driven`. Each task ends `make check` green.
 > The interactive composition screen (C7) touches `internal/tui`, which has uncommitted work — it is deferred until that is committed.
