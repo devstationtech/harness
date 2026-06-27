@@ -28,6 +28,22 @@ const (
 	// SpecsDirName holds spec-driven development artifacts, one directory per
 	// spec, under the project's .agents directory.
 	SpecsDirName = "specs"
+
+	// SourcesFileName lists the artifact sources registered under the shared
+	// home. It never holds credentials — auth is delegated to the git client.
+	SourcesFileName = "sources.yaml"
+
+	// SourcesDirName holds the working copies of remote (git) sources under the
+	// shared home.
+	SourcesDirName = "sources"
+
+	// IndexDirName caches resolved manifests under the shared home for offline
+	// search.
+	IndexDirName = "index"
+
+	// LockFileName records the reproducible resolution of a project's vendored
+	// artifacts, under the project's .agents directory.
+	LockFileName = "harness.lock"
 )
 
 // SharedHome returns the absolute path to the shared library (~/.harness),
@@ -71,4 +87,30 @@ func AgentsFilePath(projectRoot string) string {
 // SpecsDir returns the project's specs directory under .agents.
 func SpecsDir(projectRoot string) string {
 	return filepath.Join(AgentsDir(projectRoot), SpecsDirName)
+}
+
+// SourcesConfigPath returns the path to the registered sources list under the
+// shared home.
+func SourcesConfigPath(home string) string {
+	return filepath.Join(home, SourcesFileName)
+}
+
+// SourcesDir returns the directory holding remote source working copies.
+func SourcesDir(home string) string {
+	return filepath.Join(home, SourcesDirName)
+}
+
+// SourceCloneDir returns the working-copy directory for the named source.
+func SourceCloneDir(home, name string) string {
+	return filepath.Join(SourcesDir(home), name)
+}
+
+// IndexDir returns the offline manifest index directory under the shared home.
+func IndexDir(home string) string {
+	return filepath.Join(home, IndexDirName)
+}
+
+// LockPath returns the path to a project's resolution lockfile.
+func LockPath(projectRoot string) string {
+	return filepath.Join(AgentsDir(projectRoot), LockFileName)
 }

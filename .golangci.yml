@@ -13,3 +13,5 @@ linters:
         - fmt.Fprint
         - fmt.Fprintf
         - fmt.Fprintln
+        # hash.Hash.Write is documented never to return an error.
+        - (hash.Hash).Write
