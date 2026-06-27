@@ -1,7 +1,7 @@
 # Source Index and Versioning Tasks
 
 **Design**: `.agents/specs/features/source-index-and-versioning/design.md`
-**Status**: Draft
+**Status**: DONE — V1–V7 ✅. Package-level SemVer via `harness.artifacts.yaml` (index-driven resolution with convention fallback); version surfaced in list/search/upgrade; project manifest at the root with source/version/digest; `harness.lock` retired; `harness apply` reconciles + verifies. All `make check` green.
 
 > Tooling: self-contained Go CLI, no MCPs. Execution skill: `tlc-spec-driven`. Every task ends `make check` green.
 
