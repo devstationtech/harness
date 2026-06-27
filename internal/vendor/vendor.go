@@ -1,50 +1,43 @@
 // Package vendor materializes a remote artifact into a project: it copies the
-// artifact's directory under .agents/<container>/<name>/ and produces the lock
-// entry that pins exactly what was copied. Local and shared artifacts are not
-// vendored — they are referenced in place; only artifacts resolved from a remote
-// source are copied so the project is reproducible without that source.
+// artifact's directory under .agents/<container>/<name>/ and returns a content
+// digest of the copy. Local and shared artifacts are not vendored — they are
+// referenced in place; only artifacts resolved from a remote source are copied
+// so the project is reproducible without that source.
 package vendor
 
 import (
+	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
 	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 
 	"github.com/devstationtech/harness/internal/artifact"
 	"github.com/devstationtech/harness/internal/config"
-	"github.com/devstationtech/harness/internal/lock"
 	"github.com/devstationtech/harness/internal/source"
 )
 
 // Vendor copies a's directory into the project's .agents tree and returns the
-// artifact as it now lives locally, together with the lock entry that records
-// where it came from and a content hash of the copy. commit is the source's
-// resolved commit, recorded for provenance (may be empty). Vendoring is
-// idempotent: the destination is replaced wholesale, so the content hash is
-// stable across repeated runs of the same source revision.
-func Vendor(a artifact.Artifact, projectRoot, commit string) (artifact.Artifact, lock.Entry, error) {
+// artifact as it now lives locally, together with a content digest of the copy.
+// Vendoring is idempotent: the destination is replaced wholesale, so the digest
+// is stable across repeated runs of the same source revision.
+func Vendor(a artifact.Artifact, projectRoot string) (artifact.Artifact, string, error) {
 	container := a.Kind.Container()
 	dest := filepath.Join(config.AgentsDir(projectRoot), container, a.Name)
 
 	if err := os.RemoveAll(dest); err != nil {
-		return artifact.Artifact{}, lock.Entry{}, err
+		return artifact.Artifact{}, "", err
 	}
 	if err := copyTree(a.Directory, dest); err != nil {
-		return artifact.Artifact{}, lock.Entry{}, err
+		return artifact.Artifact{}, "", err
 	}
-	hash, err := lock.ContentHash(dest)
+	digest, err := ContentHash(dest)
 	if err != nil {
-		return artifact.Artifact{}, lock.Entry{}, err
-	}
-
-	entry := lock.Entry{
-		Kind:        string(a.Kind),
-		Name:        a.Name,
-		Source:      a.Origin,
-		Commit:      commit,
-		ContentHash: hash,
-		Path:        container + "/" + a.Name,
+		return artifact.Artifact{}, "", err
 	}
 
 	// The artifact now lives locally; later runs discover it under .agents.
@@ -53,7 +46,47 @@ func Vendor(a artifact.Artifact, projectRoot, commit string) (artifact.Artifact,
 	vendored.Origin = source.LocalName
 	vendored.Directory = dest
 	vendored.EntryPath = artifact.EntryFileFor(a.Kind, dest)
-	return vendored, entry, nil
+	return vendored, digest, nil
+}
+
+// ContentHash returns a stable sha256 over the contents of dir. Files are hashed
+// in sorted, forward-slash relative-path order, and text newlines are normalized
+// (CRLF to LF), so the result is identical regardless of the host operating
+// system or git checkout settings. The relative path is mixed into the digest so
+// that renaming a file changes the hash. File mode is deliberately excluded, as
+// the executable bit is not preserved across platforms.
+func ContentHash(dir string) (string, error) {
+	var relPaths []string
+	err := filepath.WalkDir(dir, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		rel, err := filepath.Rel(dir, path)
+		if err != nil {
+			return err
+		}
+		relPaths = append(relPaths, filepath.ToSlash(rel))
+		return nil
+	})
+	if err != nil {
+		return "", err
+	}
+	sort.Strings(relPaths)
+
+	digest := sha256.New()
+	for _, rel := range relPaths {
+		content, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(rel)))
+		if err != nil {
+			return "", err
+		}
+		content = bytes.ReplaceAll(content, []byte("\r\n"), []byte("\n"))
+		fmt.Fprintf(digest, "%s\n%d\n", rel, len(content))
+		digest.Write(content)
+	}
+	return "sha256:" + hex.EncodeToString(digest.Sum(nil)), nil
 }
 
 // copyTree recursively copies the directory at src to dst, preserving file

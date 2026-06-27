@@ -3,19 +3,14 @@
 package app
 
 import (
-	"context"
-	"errors"
 	"fmt"
 	"io"
-	"io/fs"
-	"os"
 	"sort"
 
 	"github.com/devstationtech/harness/internal/artifact"
 	"github.com/devstationtech/harness/internal/catalog"
 	"github.com/devstationtech/harness/internal/config"
 	"github.com/devstationtech/harness/internal/library"
-	"github.com/devstationtech/harness/internal/lock"
 	"github.com/devstationtech/harness/internal/source"
 	"github.com/devstationtech/harness/internal/tui"
 	"github.com/devstationtech/harness/internal/vendor"
@@ -118,16 +113,13 @@ func Run(out io.Writer, version string) error {
 		return nil
 	}
 
-	// Vendor any selections that come from a remote source, locking them, then
-	// persist the manifest and AGENTS.md over the now-local set.
-	resolved, entries, err := materialize(result.Selected, projectRoot, home)
+	// Vendor any selections that come from a remote source, then persist the
+	// root manifest and AGENTS.md over the now-local set.
+	resolved, digests, err := materialize(result.Selected, projectRoot, home)
 	if err != nil {
 		return err
 	}
-	if err := writeLock(projectRoot, entries); err != nil {
-		return err
-	}
-	if err := workspace.Apply(projectRoot, resolved); err != nil {
+	if err := workspace.Apply(projectRoot, resolved, digests); err != nil {
 		return err
 	}
 	printSaveSummary(out, projectRoot, resolved)
@@ -136,68 +128,30 @@ func Run(out io.Writer, version string) error {
 }
 
 // materialize vendors every selection that comes from a remote source into the
-// project, returning the selection as it now lives locally plus the lock entries
-// that pin the vendored artifacts. Local and shared selections pass through
-// untouched (they are referenced in place).
-func materialize(selected []artifact.Artifact, projectRoot, home string) ([]artifact.Artifact, []lock.Entry, error) {
+// project, returning the selection as it now lives locally plus the content
+// digest of each vendored artifact (keyed by identity). Local and shared
+// selections pass through untouched (they are referenced in place).
+func materialize(selected []artifact.Artifact, projectRoot, home string) ([]artifact.Artifact, map[artifact.Identity]string, error) {
 	remotes, err := config.LoadSources(config.SourcesConfigPath(home))
 	if err != nil {
 		return nil, nil, err
 	}
-	commits := make(map[string]string)
+	digests := make(map[artifact.Identity]string)
 	final := make([]artifact.Artifact, 0, len(selected))
-	var entries []lock.Entry
 
 	for _, a := range selected {
-		remote, isRemote := remotes.Find(a.Origin)
-		if !isRemote {
+		if _, isRemote := remotes.Find(a.Origin); !isRemote {
 			final = append(final, a)
 			continue
 		}
-		commit, known := commits[a.Origin]
-		if !known {
-			commit = resolveCommit(home, remote)
-			commits[a.Origin] = commit
-		}
-		vendored, entry, err := vendor.Vendor(a, projectRoot, commit)
+		vendored, digest, err := vendor.Vendor(a, projectRoot)
 		if err != nil {
 			return nil, nil, err
 		}
 		final = append(final, vendored)
-		entries = append(entries, entry)
+		digests[vendored.Identity()] = digest
 	}
-	return final, entries, nil
-}
-
-// resolveCommit reports the checked-out commit of a remote source for
-// provenance. It is best-effort: an empty string is recorded if git cannot be
-// queried.
-func resolveCommit(home string, s config.SourceConfig) string {
-	repo := source.NewGitRepository(s.Name, s.URL, s.Ref, config.SourceCloneDir(home, s.Name), artifact.SourceShared)
-	commit, err := repo.Commit(context.Background())
-	if err != nil {
-		return ""
-	}
-	return commit
-}
-
-// writeLock persists the lock entries for a project, or removes a stale lockfile
-// when nothing remote is vendored.
-func writeLock(projectRoot string, entries []lock.Entry) error {
-	path := config.LockPath(projectRoot)
-	if len(entries) == 0 {
-		if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
-			return err
-		}
-		return nil
-	}
-	sort.SliceStable(entries, func(i, j int) bool {
-		if entries[i].Kind != entries[j].Kind {
-			return entries[i].Kind < entries[j].Kind
-		}
-		return entries[i].Name < entries[j].Name
-	})
-	return lock.New(entries).Save(path)
+	return final, digests, nil
 }
 
 // loadCatalog resolves and merges every source for the current project and

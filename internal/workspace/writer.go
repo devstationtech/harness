@@ -8,25 +8,25 @@ import (
 	"github.com/devstationtech/harness/internal/config"
 )
 
-const dirPermission = 0o755
 const filePermission = 0o644
 
-// Apply persists a project's selection: it ensures the .agents structure exists,
-// writes the manifest and (re)generates AGENTS.md. Shared artifacts are not
-// copied — they are referenced in place by AGENTS.md.
-func Apply(projectRoot string, selected []artifact.Artifact) error {
-	if err := EnsureStructure(projectRoot); err != nil {
+// Apply persists a project's selection: it writes the manifest at the project
+// root and (re)generates AGENTS.md. digests maps a selection's identity to the
+// content digest of its vendored copy (empty for artifacts referenced in place).
+//
+// Shared and local artifacts are referenced in place by AGENTS.md; only remote
+// artifacts are vendored (by the caller) before Apply runs. Per-kind directories
+// come into existence on demand when a project-local artifact is authored or
+// vendored, so an empty .agents/skills/ never clutters a project.
+func Apply(projectRoot string, selected []artifact.Artifact, digests map[artifact.Identity]string) error {
+	selections := make([]Selection, 0, len(selected))
+	for _, a := range selected {
+		selections = append(selections, SelectionOf(a, digests[a.Identity()]))
+	}
+	if err := NewManifest(selections).Save(config.ManifestPath(projectRoot)); err != nil {
 		return err
 	}
-
-	manifest := NewManifest(selected)
-	manifestBytes, err := manifest.Marshal()
-	if err != nil {
-		return err
-	}
-	if err := os.WriteFile(config.ManifestPath(projectRoot), manifestBytes, filePermission); err != nil {
-		return err
-	}
+	removeStale(projectRoot)
 
 	agentsBytes, err := RenderAgentsFile(projectRoot, selected)
 	if err != nil {
@@ -35,18 +35,12 @@ func Apply(projectRoot string, selected []artifact.Artifact) error {
 	return os.WriteFile(config.AgentsFilePath(projectRoot), agentsBytes, filePermission)
 }
 
-// EnsureStructure creates the project's .agents directory tree (the kind
-// containers plus specs) so the user can author local artifacts immediately.
-func EnsureStructure(projectRoot string) error {
-	agentsDir := config.AgentsDir(projectRoot)
-	dirs := []string{agentsDir, config.SpecsDir(projectRoot)}
-	for _, kind := range artifact.Kinds() {
-		dirs = append(dirs, filepath.Join(agentsDir, kind.Container()))
+// removeStale best-effort removes manifest and lock files from the pre-v2
+// location under .agents, so a project that predates the root manifest does not
+// keep two copies.
+func removeStale(projectRoot string) {
+	agents := config.AgentsDir(projectRoot)
+	for _, name := range []string{config.ManifestFileName, "harness.lock"} {
+		_ = os.Remove(filepath.Join(agents, name))
 	}
-	for _, dir := range dirs {
-		if err := os.MkdirAll(dir, dirPermission); err != nil {
-			return err
-		}
-	}
-	return nil
 }

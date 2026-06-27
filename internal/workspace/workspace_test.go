@@ -11,20 +11,16 @@ import (
 )
 
 func TestManifestRoundTrip(t *testing.T) {
-	// @Given a manifest built from selected artifacts
-	selected := []artifact.Artifact{
-		{Kind: artifact.KindRule, Name: "hexagonal", Source: artifact.SourceShared},
-		{Kind: artifact.KindSkill, Name: "cqrs", Source: artifact.SourceLocal},
+	// @Given a manifest with a referenced and a vendored selection
+	selections := []Selection{
+		SelectionOf(artifact.Artifact{Kind: artifact.KindRule, Name: "hexagonal", Origin: "home", Version: "1.0.0"}, ""),
+		SelectionOf(artifact.Artifact{Kind: artifact.KindSkill, Name: "cqrs", Origin: "acme", Version: "2.1.0"}, "sha256:abc"),
 	}
-	manifest := NewManifest(selected)
+	manifest := NewManifest(selections)
 
-	// @When it is marshalled and written, then loaded back
+	// @When it is saved and loaded back
 	path := filepath.Join(t.TempDir(), "harness.yaml")
-	data, err := manifest.Marshal()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(path, data, 0o644); err != nil {
+	if err := manifest.Save(path); err != nil {
 		t.Fatal(err)
 	}
 	loaded, err := LoadManifest(path)
@@ -32,13 +28,17 @@ func TestManifestRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// @Then the selections survive the round trip
+	// @Then the selections survive, source/version/digest included, rule first
 	if len(loaded.Selections) != 2 {
 		t.Fatalf("selections = %d, want 2", len(loaded.Selections))
 	}
-	ids := loaded.Identities()
-	if ids[0] != (artifact.Identity{Kind: artifact.KindRule, Name: "hexagonal"}) {
-		t.Errorf("first identity = %+v", ids[0])
+	first := loaded.Selections[0]
+	if first.Kind != artifact.KindRule || first.Name != "hexagonal" || first.Source != "home" || first.Version != "1.0.0" {
+		t.Errorf("first selection = %+v", first)
+	}
+	second := loaded.Selections[1]
+	if second.Version != "2.1.0" || second.Digest != "sha256:abc" {
+		t.Errorf("second selection lost version/digest: %+v", second)
 	}
 }
 
@@ -46,7 +46,6 @@ func TestLoadManifestMissingFileIsEmpty(t *testing.T) {
 	// @Given a path with no manifest file
 	// @When the manifest is loaded
 	manifest, err := LoadManifest(filepath.Join(t.TempDir(), "absent.yaml"))
-
 	// @Then an empty manifest is returned without error
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -56,7 +55,7 @@ func TestLoadManifestMissingFileIsEmpty(t *testing.T) {
 	}
 }
 
-func TestApplyWritesStructureManifestAndAgentsFile(t *testing.T) {
+func TestApplyWritesManifestAndAgentsFile(t *testing.T) {
 	// @Given a project root and a shared artifact referenced in place
 	projectRoot := t.TempDir()
 	sharedEntry := filepath.Join(t.TempDir(), "skills", "cqrs", "SKILL.md")
@@ -71,22 +70,28 @@ func TestApplyWritesStructureManifestAndAgentsFile(t *testing.T) {
 	}
 
 	// @When the selection is applied
-	if err := Apply(projectRoot, selected); err != nil {
+	if err := Apply(projectRoot, selected, nil); err != nil {
 		t.Fatal(err)
 	}
 
-	// @Then the .agents structure, manifest and AGENTS.md all exist
+	// @Then the manifest sits at the project root (not under .agents)
+	if _, err := os.Stat(config.ManifestPath(projectRoot)); err != nil {
+		t.Errorf("missing root manifest: %v", err)
+	}
+	if config.ManifestPath(projectRoot) != filepath.Join(projectRoot, "harness.yaml") {
+		t.Errorf("manifest path = %q, want project root", config.ManifestPath(projectRoot))
+	}
+
+	// @Then per-kind directories and specs/ are NOT created eagerly; they are
+	// materialized on demand only when a local artifact or spec is authored
 	for _, kind := range artifact.Kinds() {
 		dir := filepath.Join(config.AgentsDir(projectRoot), kind.Container())
-		if _, err := os.Stat(dir); err != nil {
-			t.Errorf("missing container %s: %v", kind.Container(), err)
+		if _, err := os.Stat(dir); !os.IsNotExist(err) {
+			t.Errorf("expected %s not to be created eagerly", kind.Container())
 		}
 	}
-	if _, err := os.Stat(config.SpecsDir(projectRoot)); err != nil {
-		t.Errorf("missing specs dir: %v", err)
-	}
-	if _, err := os.Stat(config.ManifestPath(projectRoot)); err != nil {
-		t.Errorf("missing manifest: %v", err)
+	if _, err := os.Stat(config.SpecsDir(projectRoot)); !os.IsNotExist(err) {
+		t.Errorf("expected specs/ not to be created eagerly")
 	}
 
 	// @Then AGENTS.md references the shared artifact by absolute path with a

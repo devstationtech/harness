@@ -7,15 +7,16 @@ import (
 
 	"github.com/devstationtech/harness/internal/artifact"
 	"github.com/devstationtech/harness/internal/config"
-	"github.com/devstationtech/harness/internal/lock"
 	"github.com/devstationtech/harness/internal/source"
 	"github.com/devstationtech/harness/internal/vendor"
+	"github.com/devstationtech/harness/internal/workspace"
 )
 
-// Upgrade re-resolves a project's locked artifacts against the current ref of
-// each source, re-vendoring those whose content changed and rewriting the
-// lockfile. It reports which artifacts changed. An artifact whose source is no
-// longer configured, or that has disappeared from its source, is left as-is.
+// Upgrade re-resolves a project's remote selections against the current ref of
+// each source, re-vendoring those whose content changed and rewriting the root
+// manifest with new versions and digests. It reports the version transitions. A
+// selection whose source is no longer configured, or that has disappeared from
+// its source, is left as-is.
 func Upgrade(out io.Writer) error {
 	home, err := config.SharedHome()
 	if err != nil {
@@ -26,12 +27,12 @@ func Upgrade(out io.Writer) error {
 		return err
 	}
 
-	current, err := lock.Load(config.LockPath(projectRoot))
+	manifest, err := workspace.LoadManifest(config.ManifestPath(projectRoot))
 	if err != nil {
 		return err
 	}
-	if len(current.Artifacts) == 0 {
-		fmt.Fprintln(out, "Nothing locked to upgrade.")
+	if len(manifest.Selections) == 0 {
+		fmt.Fprintln(out, "Nothing to upgrade.")
 		return nil
 	}
 	configured, err := config.LoadSources(config.SourcesConfigPath(home))
@@ -40,54 +41,52 @@ func Upgrade(out io.Writer) error {
 	}
 
 	ctx := context.Background()
-	commits := make(map[string]string) // source name -> commit, set once synced
-	updated := make([]lock.Entry, 0, len(current.Artifacts))
+	synced := make(map[string]bool)
+	updated := make([]workspace.Selection, 0, len(manifest.Selections))
 	changed := 0
 
-	for _, entry := range current.Artifacts {
-		s, ok := configured.Find(entry.Source)
+	for _, sel := range manifest.Selections {
+		s, ok := configured.Find(sel.Source)
 		if !ok {
-			fmt.Fprintf(out, "  %s/%s: source not configured; left unchanged\n", entry.Source, entry.Name)
-			updated = append(updated, entry)
+			// Local, shared, or a removed source: nothing to re-resolve.
+			updated = append(updated, sel)
 			continue
 		}
 		repo := source.NewGitRepository(s.Name, s.URL, s.Ref, config.SourceCloneDir(home, s.Name), artifact.SourceShared)
-		commit, synced := commits[s.Name]
-		if !synced {
+		if !synced[s.Name] {
 			if err := repo.Sync(ctx); err != nil {
 				return fmt.Errorf("refresh %s: %w", s.Name, err)
 			}
-			commit, _ = repo.Commit(ctx)
-			commits[s.Name] = commit
+			synced[s.Name] = true
 		}
 
 		resolved, _, err := repo.Resolve()
 		if err != nil {
 			return err
 		}
-		found, ok := findArtifact(resolved, entry.Kind, entry.Name)
+		found, ok := findArtifact(resolved, string(sel.Kind), sel.Name)
 		if !ok {
-			fmt.Fprintf(out, "  %s/%s: no longer in source; left unchanged\n", entry.Source, entry.Name)
-			updated = append(updated, entry)
+			fmt.Fprintf(out, "  %s/%s: no longer in source; left unchanged\n", sel.Source, sel.Name)
+			updated = append(updated, sel)
 			continue
 		}
 
-		_, newEntry, err := vendor.Vendor(found, projectRoot, commit)
+		_, digest, err := vendor.Vendor(found, projectRoot)
 		if err != nil {
 			return err
 		}
-		if newEntry.ContentHash != entry.ContentHash {
+		next := workspace.SelectionOf(found, digest)
+		if next.Digest != sel.Digest {
 			changed++
-			fmt.Fprintf(out, "  %s/%s: updated %s → %s\n",
-				entry.Source, entry.Name, shortCommit(entry.Commit), shortCommit(newEntry.Commit))
+			fmt.Fprintf(out, "  %s/%s: %s → %s\n", sel.Source, sel.Name, versionLabel(sel.Version), versionLabel(next.Version))
 		}
-		updated = append(updated, newEntry)
+		updated = append(updated, next)
 	}
 
-	if err := writeLock(projectRoot, updated); err != nil {
+	if err := workspace.NewManifest(updated).Save(config.ManifestPath(projectRoot)); err != nil {
 		return err
 	}
-	fmt.Fprintf(out, "Upgrade complete: %d changed of %d locked.\n", changed, len(updated))
+	fmt.Fprintf(out, "Upgrade complete: %d changed of %d.\n", changed, len(updated))
 	return nil
 }
 
@@ -101,14 +100,10 @@ func findArtifact(artifacts []artifact.Artifact, kind, name string) (artifact.Ar
 	return artifact.Artifact{}, false
 }
 
-// shortCommit abbreviates a commit SHA for human-readable output.
-func shortCommit(commit string) string {
-	switch {
-	case commit == "":
-		return "(none)"
-	case len(commit) > 7:
-		return commit[:7]
-	default:
-		return commit
+// versionLabel renders a version for reporting, naming the unversioned case.
+func versionLabel(version string) string {
+	if version == "" {
+		return "unversioned"
 	}
+	return version
 }

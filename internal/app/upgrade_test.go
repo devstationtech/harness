@@ -12,25 +12,33 @@ import (
 	"github.com/devstationtech/harness/internal/app"
 	"github.com/devstationtech/harness/internal/artifact"
 	"github.com/devstationtech/harness/internal/config"
-	"github.com/devstationtech/harness/internal/lock"
 	"github.com/devstationtech/harness/internal/source"
 	"github.com/devstationtech/harness/internal/source/gitcli"
 	"github.com/devstationtech/harness/internal/vendor"
+	"github.com/devstationtech/harness/internal/workspace"
 )
 
-// commitSkillDescription rewrites a skill's description in the fixture repo and
-// commits it, producing a new upstream revision.
-func commitSkillDescription(t *testing.T, repo, name, description string) {
+// mustGit runs a git command in dir, failing the test on error.
+func mustGit(t *testing.T, ctx context.Context, dir string, args ...string) {
 	t.Helper()
-	ctx := context.Background()
-	body := "---\nname: " + name + "\ndescription: " + description + "\n---\nbody\n"
-	if err := os.WriteFile(filepath.Join(repo, "skills", name, "SKILL.md"), []byte(body), 0o644); err != nil {
+	if _, err := gitcli.Run(ctx, dir, args...); err != nil {
+		t.Fatalf("git %v: %v", args, err)
+	}
+}
+
+// writeIndexedSkill writes a skill and a package manifest versioning it.
+func writeIndexedSkill(t *testing.T, repo, name, description, version string) {
+	t.Helper()
+	dir := filepath.Join(repo, "skills", name)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := gitcli.Run(ctx, repo, "add", "."); err != nil {
+	doc := "---\nname: " + name + "\ndescription: " + description + "\n---\nbody\n"
+	if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte(doc), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := gitcli.Run(ctx, repo, "commit", "-m", "update "+name); err != nil {
+	index := "artifacts:\n  - kind: skill\n    name: " + name + "\n    version: " + version + "\n    path: skills/" + name + "\n"
+	if err := os.WriteFile(filepath.Join(repo, source.ArtifactsManifestFile), []byte(index), 0o644); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -44,9 +52,21 @@ func findResolved(artifacts []artifact.Artifact, name string) (artifact.Artifact
 	return artifact.Artifact{}, false
 }
 
-func TestUpgradeReVendorsChangedArtifact(t *testing.T) {
-	// @Given a project that vendored a skill from a git source at some revision
-	origin := gitFixture(t)
+func TestUpgradeReVendorsAndReportsVersionTransition(t *testing.T) {
+	if err := gitcli.Available(); err != nil {
+		t.Skip("git not available")
+	}
+	ctx := context.Background()
+
+	// @Given a versioned git source and a project that vendored it at 1.0.0
+	origin := t.TempDir()
+	writeIndexedSkill(t, origin, "reviewer", "first", "1.0.0")
+	mustGit(t, ctx, origin, "init", "-b", "main")
+	mustGit(t, ctx, origin, "config", "user.email", "test@example.com")
+	mustGit(t, ctx, origin, "config", "user.name", "Harness Test")
+	mustGit(t, ctx, origin, "add", ".")
+	mustGit(t, ctx, origin, "commit", "-m", "seed")
+
 	home := t.TempDir()
 	t.Setenv("HARNESS_HOME", home)
 	if err := app.Source(io.Discard, []string{"add", "file://" + origin, "--name", "mine"}); err != nil {
@@ -61,19 +81,15 @@ func TestUpgradeReVendorsChangedArtifact(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	skill, ok := findResolved(resolved, "reviewer")
-	if !ok {
-		t.Fatal("fixture skill not found")
+	found, ok := findResolved(resolved, "reviewer")
+	if !ok || found.Version != "1.0.0" {
+		t.Fatalf("fixture skill missing or wrong version: %+v", found)
 	}
-	commit, err := repo.Commit(context.Background())
+	_, digest, err := vendor.Vendor(found, project)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, entry, err := vendor.Vendor(skill, project, commit)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := lock.New([]lock.Entry{entry}).Save(config.LockPath(project)); err != nil {
+	if err := workspace.NewManifest([]workspace.Selection{workspace.SelectionOf(found, digest)}).Save(config.ManifestPath(project)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -87,29 +103,31 @@ func TestUpgradeReVendorsChangedArtifact(t *testing.T) {
 		t.Errorf("expected no changes, got: %q", out.String())
 	}
 
-	// @When the artifact changes upstream
-	commitSkillDescription(t, origin, "reviewer", "a substantially new description")
+	// @When the source bumps the version and content
+	writeIndexedSkill(t, origin, "reviewer", "second edition", "1.1.0")
+	mustGit(t, ctx, origin, "add", ".")
+	mustGit(t, ctx, origin, "commit", "-m", "bump")
 
-	// @Then upgrade re-vendors it, reports the change, and rewrites the lock
+	// @Then upgrade re-vendors, reports the transition, and updates the manifest
 	out.Reset()
 	if err := app.Upgrade(&out); err != nil {
 		t.Fatalf("upgrade: %v", err)
 	}
-	if !strings.Contains(out.String(), "mine/reviewer: updated") {
-		t.Errorf("expected an update report, got: %q", out.String())
+	if !strings.Contains(out.String(), "mine/reviewer: 1.0.0 → 1.1.0") {
+		t.Errorf("expected a version transition, got: %q", out.String())
+	}
+	updated, err := workspace.LoadManifest(config.ManifestPath(project))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(updated.Selections) != 1 || updated.Selections[0].Version != "1.1.0" {
+		t.Errorf("manifest not updated to 1.1.0: %+v", updated.Selections)
 	}
 	data, err := os.ReadFile(filepath.Join(project, ".agents", "skills", "reviewer", "SKILL.md"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(data), "substantially new description") {
+	if !strings.Contains(string(data), "second edition") {
 		t.Error("vendored content was not updated")
-	}
-	relocked, err := lock.Load(config.LockPath(project))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(relocked.Artifacts) != 1 || relocked.Artifacts[0].ContentHash == entry.ContentHash {
-		t.Errorf("expected the lock hash to change, got %+v", relocked.Artifacts)
 	}
 }

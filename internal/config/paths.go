@@ -40,10 +40,6 @@ const (
 	// IndexDirName caches resolved manifests under the shared home for offline
 	// search.
 	IndexDirName = "index"
-
-	// LockFileName records the reproducible resolution of a project's vendored
-	// artifacts, under the project's .agents directory.
-	LockFileName = "harness.lock"
 )
 
 // SharedHome returns the absolute path to the shared library (~/.harness),
@@ -74,9 +70,9 @@ func AgentsDir(projectRoot string) string {
 	return filepath.Join(projectRoot, AgentsDirName)
 }
 
-// ManifestPath returns the path to the project manifest.
+// ManifestPath returns the path to the project manifest, at the project root.
 func ManifestPath(projectRoot string) string {
-	return filepath.Join(AgentsDir(projectRoot), ManifestFileName)
+	return filepath.Join(projectRoot, ManifestFileName)
 }
 
 // AgentsFilePath returns the path to the generated AGENTS.md.
@@ -108,9 +104,4 @@ func SourceCloneDir(home, name string) string {
 // IndexDir returns the offline manifest index directory under the shared home.
 func IndexDir(home string) string {
 	return filepath.Join(home, IndexDirName)
-}
-
-// LockPath returns the path to a project's resolution lockfile.
-func LockPath(projectRoot string) string {
-	return filepath.Join(AgentsDir(projectRoot), LockFileName)
 }
