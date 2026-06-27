@@ -6,19 +6,24 @@ import "github.com/charmbracelet/lipgloss"
 // #666666 dividers, #323232/#aeaeae chips, and constant green/yellow/red status.
 // The whole interface renders against a dark-gray canvas, so every text style
 // also carries the canvas background to keep the fill uniform.
+// All colors are fixed hex (truecolor) rather than ANSI palette indices, so they
+// render identically across terminals. Palette indices (0-15 especially) are
+// themed per terminal — e.g. "cyan"/14 shows bluish in GNOME Terminal but washes
+// to near-white in Warp — which is why these were pinned. The hues match the
+// Tango "bright" palette the devstation theme intends.
 var (
 	canvas  = lipgloss.Color("#1e1e1e") // dark gray full-screen background
-	accent  = lipgloss.Color("14")      // cyan (devstation "primary")
-	textCol = lipgloss.Color("252")
-	muted   = lipgloss.Color("245")
-	faint   = lipgloss.Color("240")
+	accent  = lipgloss.Color("#34e2e2") // cyan (devstation "primary")
+	textCol = lipgloss.Color("#d0d0d0")
+	muted   = lipgloss.Color("#8a8a8a")
+	faint   = lipgloss.Color("#585858")
 	border  = lipgloss.Color("#666666")
 	chipBg  = lipgloss.Color("#323232")
 	chipFg  = lipgloss.Color("#aeaeae")
 	tabSel  = lipgloss.Color("#4d4d4d") // lighter chip tone for the active tab
-	success = lipgloss.Color("10")
-	warning = lipgloss.Color("11")
-	sharedC = lipgloss.Color("39") // calm blue for the "shared" source
+	success = lipgloss.Color("#8ae234")
+	warning = lipgloss.Color("#fce94f")
+	sharedC = lipgloss.Color("#00afff") // calm blue for the "shared" source
 )
 
 const (
