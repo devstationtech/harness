@@ -36,8 +36,14 @@ _No rules selected yet._
 {{range .Skills}}| `{{.Name}}` | {{.Description}} | {{.Source}} | `{{.Path}}` |
 {{end}}{{else}}
 _No skills selected yet._
-{{end}}
-## Agents — delegate on NEED
+{{end}}{{if .Compositions}}## Composed designs — contract + implementations
+{{range .Compositions}}
+### `{{.Abstract}}`{{if not .Complete}} — ⚠ incomplete composition{{end}}
+
+Load the agnostic contract (`{{.Path}}`) first, then the chosen implementation per concern:
+{{range .Contracts}}- **{{.Contract}}** → {{if .Capability}}`{{.Capability}}` — `{{.Path}}`{{else}}⚠ no implementation selected{{end}}
+{{end}}{{end}}
+{{end}}## Agents — delegate on NEED
 {{if .Agents}}
 | Agent | When to delegate | Source | Path |
 | --- | --- | --- | --- |

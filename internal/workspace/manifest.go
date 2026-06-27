@@ -28,11 +28,12 @@ type Manifest struct {
 
 // Selection is one activated artifact.
 type Selection struct {
-	Kind    artifact.Kind `yaml:"kind"`
-	Name    string        `yaml:"name"`
-	Source  string        `yaml:"source"`            // origin name: local | home | <remote>
-	Version string        `yaml:"version,omitempty"` // SemVer; empty = unversioned
-	Digest  string        `yaml:"digest,omitempty"`  // sha256 of vendored content; empty if referenced
+	Kind     artifact.Kind     `yaml:"kind"`
+	Name     string            `yaml:"name"`
+	Source   string            `yaml:"source"`             // origin name: local | home | <remote>
+	Version  string            `yaml:"version,omitempty"`  // SemVer; empty = unversioned
+	Digest   string            `yaml:"digest,omitempty"`   // sha256 of vendored content; empty if referenced
+	Bindings map[string]string `yaml:"bindings,omitempty"` // abstract skill: contract -> capability name
 }
 
 // SelectionOf builds a selection for a resolved artifact and an optional content

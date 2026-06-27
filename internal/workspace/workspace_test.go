@@ -132,3 +132,40 @@ func TestRenderAgentsFileUsesRelativePathForLocal(t *testing.T) {
 		t.Errorf("expected relative path in AGENTS.md:\n%s", rendered)
 	}
 }
+
+func TestRenderAgentsFileComposesAbstractAndCapability(t *testing.T) {
+	// @Given an abstract skill (two contracts) and a capability providing one
+	projectRoot := t.TempDir()
+	abstractEntry := filepath.Join(t.TempDir(), "skills", "lld", "SKILL.md")
+	capabilityEntry := filepath.Join(t.TempDir(), "skills", "lld-ts", "SKILL.md")
+	selected := []artifact.Artifact{
+		{Kind: artifact.KindSkill, Name: "lld", Description: "agnostic", Source: artifact.SourceShared, EntryPath: abstractEntry, Contracts: []string{"domain", "persistence"}},
+		{Kind: artifact.KindSkill, Name: "lld-ts", Description: "ts", Source: artifact.SourceShared, EntryPath: capabilityEntry, Implements: "lld", Provides: []string{"domain"}, Stack: "typescript"},
+	}
+
+	// @When AGENTS.md is rendered
+	out, err := RenderAgentsFile(projectRoot, selected)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rendered := string(out)
+
+	// @Then a composition section binds domain and flags persistence as unbound
+	if !strings.Contains(rendered, "Composed designs") {
+		t.Errorf("missing compositions section:\n%s", rendered)
+	}
+	if !strings.Contains(rendered, "**domain** → `lld-ts`") {
+		t.Errorf("domain not bound to lld-ts:\n%s", rendered)
+	}
+	if !strings.Contains(rendered, "**persistence** → ⚠ no implementation selected") {
+		t.Errorf("persistence not flagged as unbound:\n%s", rendered)
+	}
+	if !strings.Contains(rendered, "incomplete composition") {
+		t.Errorf("missing incomplete marker:\n%s", rendered)
+	}
+
+	// @And the abstract and bound capability are hidden from the flat skills table
+	if strings.Contains(rendered, "| `lld` |") || strings.Contains(rendered, "| `lld-ts` |") {
+		t.Errorf("abstract/capability should not appear in the skills table:\n%s", rendered)
+	}
+}

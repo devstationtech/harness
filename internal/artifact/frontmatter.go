@@ -18,6 +18,15 @@ type Frontmatter struct {
 	Compatibility string            `yaml:"compatibility,omitempty"`
 	Metadata      map[string]string `yaml:"metadata,omitempty"`
 	AllowedTools  string            `yaml:"allowed-tools,omitempty"`
+
+	// Composition fields. An abstract skill declares the contracts it needs
+	// implemented; a capability declares which abstract it implements, the
+	// contracts it provides, and its stack. These are harness-specific and
+	// ignored by other agents (agentskills-compatible).
+	Contracts  []string `yaml:"contracts,omitempty"`
+	Implements string   `yaml:"implements,omitempty"`
+	Provides   []string `yaml:"provides,omitempty"`
+	Stack      string   `yaml:"stack,omitempty"`
 }
 
 const (
@@ -78,6 +87,9 @@ func (f Frontmatter) Validate(expectedName string) error {
 		return fmt.Errorf("description is required")
 	case len(f.Description) > maxDescriptionLength:
 		return fmt.Errorf("description must be at most %d characters", maxDescriptionLength)
+	}
+	if len(f.Contracts) > 0 && f.Implements != "" {
+		return fmt.Errorf("an artifact is either an abstract (contracts) or a capability (implements), not both")
 	}
 	return nil
 }

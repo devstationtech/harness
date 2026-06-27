@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 
 	"github.com/devstationtech/harness/internal/artifact"
+	"github.com/devstationtech/harness/internal/compose"
 	"github.com/devstationtech/harness/internal/config"
 )
 
@@ -19,9 +20,14 @@ const filePermission = 0o644
 // come into existence on demand when a project-local artifact is authored or
 // vendored, so an empty .agents/skills/ never clutters a project.
 func Apply(projectRoot string, selected []artifact.Artifact, digests map[artifact.Identity]string) error {
+	bindings := bindingsByAbstract(selected)
 	selections := make([]Selection, 0, len(selected))
 	for _, a := range selected {
-		selections = append(selections, SelectionOf(a, digests[a.Identity()]))
+		selection := SelectionOf(a, digests[a.Identity()])
+		if bound := bindings[a.Identity()]; len(bound) > 0 {
+			selection.Bindings = bound
+		}
+		selections = append(selections, selection)
 	}
 	if err := NewManifest(selections).Save(config.ManifestPath(projectRoot)); err != nil {
 		return err
@@ -33,6 +39,20 @@ func Apply(projectRoot string, selected []artifact.Artifact, digests map[artifac
 		return err
 	}
 	return os.WriteFile(config.AgentsFilePath(projectRoot), agentsBytes, filePermission)
+}
+
+// bindingsByAbstract composes the selected set and returns, per abstract skill
+// identity, its contract→capability bindings for recording in the manifest.
+func bindingsByAbstract(selected []artifact.Artifact) map[artifact.Identity]map[string]string {
+	out := make(map[artifact.Identity]map[string]string)
+	for _, composition := range compose.Bind(selected) {
+		bound := make(map[string]string, len(composition.Bindings))
+		for _, binding := range composition.Bindings {
+			bound[binding.Contract] = binding.Capability.Name
+		}
+		out[composition.Abstract] = bound
+	}
+	return out
 }
 
 // removeStale best-effort removes manifest and lock files from the pre-v2

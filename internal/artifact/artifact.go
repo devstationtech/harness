@@ -121,7 +121,21 @@ type Artifact struct {
 	// OverridesShared is true when a local artifact shadows a shared one of the
 	// same kind and name.
 	OverridesShared bool
+
+	// Composition. Contracts is non-empty for an abstract skill (the contracts
+	// it needs implemented). Implements/Provides/Stack are set for a capability
+	// (the abstract it implements, the contracts it fulfils, and its stack).
+	Contracts  []string
+	Implements string
+	Provides   []string
+	Stack      string
 }
+
+// IsAbstract reports whether the artifact declares contracts to be implemented.
+func (a Artifact) IsAbstract() bool { return len(a.Contracts) > 0 }
+
+// IsCapability reports whether the artifact implements an abstract skill.
+func (a Artifact) IsCapability() bool { return a.Implements != "" }
 
 // Identity uniquely keys an artifact within a catalog by kind and name.
 type Identity struct {
