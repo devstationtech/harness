@@ -1,7 +1,7 @@
 # Multi-Source Artifact Management Tasks
 
 **Design**: `.agents/specs/features/multi-source-artifacts/design.md`
-**Status**: Phase 1 done (T1–T3 ✅); Phase 2 next
+**Status**: T1–T6 ✅ (Source port, git + local adapters, config, lockfile); next: T7 vendor → T8 wire save → T9 source commands
 
 > Tooling note (TLC "ASK about MCPs/Skills"): this is a self-contained Go CLI — tasks need **no MCPs**. The relevant skill during execution is `tlc-spec-driven` itself (verify-per-task, atomic commits). Diagram/exploration skills (`mermaid-studio`, `codenavi`) are not installed; inline mermaid is used.
 
@@ -109,7 +109,7 @@ T9 ─────┤
 
 ---
 
-### T4: Implement the `GitRepository` adapter (system-git wrapper) [P]
+### T4: Implement the `GitRepository` adapter (system-git wrapper) [P] ✅
 
 **What**: Clone-or-pull a git source and resolve artifacts over the checked-out tree.
 **Where**: `internal/source/git.go`; `internal/source/gitcli/gitcli.go`
@@ -121,11 +121,11 @@ T9 ─────┤
 
 **Done when**:
 
-- [ ] `exec.LookPath("git")` with actionable error when absent (SRC-06).
-- [ ] Commands use `exec.Command("git", args...)` slice form, `-c core.autocrlf=false -c core.eol=lf`, env `GIT_TERMINAL_PROMPT=0`.
-- [ ] Clone into temp dir then `os.Rename` on success.
-- [ ] `Sync()` clones when absent, fetches+checks out the ref when present.
-- [ ] Test against a local `file://` git repo fixture (no network): resolves its artifacts.
+- [x] `gitcli.Available()` via `exec.LookPath("git")` with actionable `ErrNotFound` (SRC-06).
+- [x] Commands use `exec.CommandContext("git", args...)` slice form, `-c core.autocrlf=false -c core.eol=lf`, env `GIT_TERMINAL_PROMPT=0`; `ctx` first param (SRC-05).
+- [x] Clone into a staging dir on the same volume then `os.Rename` on success.
+- [x] `Sync(ctx)` clones when absent, fetches+checks out the ref when present; `Resolve()` reads the checkout offline; `Commit(ctx)` reports the SHA.
+- [x] Tests against a local `file://` git fixture (no network): resolve + idempotent re-sync.
 
 **Verify**: `go test ./internal/source/... -run Git`
 
@@ -133,7 +133,7 @@ T9 ─────┤
 
 ---
 
-### T5: `sources.yaml` config load/save + new config paths [P]
+### T5: `sources.yaml` config load/save + new config paths [P] ✅
 
 **What**: Read/write `~/.harness/sources.yaml`; add `sources/`, `index/`, `harness.lock` path helpers.
 **Where**: `internal/config/paths.go`; `internal/config/sources.go` (new)
@@ -145,9 +145,9 @@ T9 ─────┤
 
 **Done when**:
 
-- [ ] `SourcesConfig` round-trips through yaml.v3.
-- [ ] Path helpers `SourcesConfigPath`, `SourceCloneDir(name)`, `IndexDir`, `LockPath(projectRoot)` added.
-- [ ] Missing file → empty config (no error), mirroring `LoadManifest`.
+- [x] `SourcesConfig` round-trips through yaml.v3 (go-cmp test); `Save` creates the parent dir; `Find` looks up by name.
+- [x] Path helpers `SourcesConfigPath`, `SourcesDir`, `SourceCloneDir(name)`, `IndexDir`, `LockPath(projectRoot)` added.
+- [x] Missing file → empty config (no error), mirroring `LoadManifest`.
 
 **Verify**: `go test ./internal/config/...`
 
@@ -155,7 +155,7 @@ T9 ─────┤
 
 ---
 
-### T6: Content hash + `harness.lock` read/write [P]
+### T6: Content hash + `harness.lock` read/write [P] ✅
 
 **What**: Stable directory content hash and lockfile (de)serialization.
 **Where**: `internal/lock/lock.go`
@@ -167,9 +167,9 @@ T9 ─────┤
 
 **Done when**:
 
-- [ ] `ContentHash(dir)` walks sorted, normalizes `\r\n`→`\n` for text, returns `sha256:...`.
-- [ ] Test asserts identical hash for a tree differing only in line endings (proves SRC-07).
-- [ ] `Lockfile` Load/Save round-trips; `path` stored forward-slash.
+- [x] `ContentHash(dir)` walks in sorted forward-slash order, normalizes `\r\n`→`\n`, mixes in the relative path, excludes mode, returns `sha256:...`.
+- [x] Test asserts identical hash for a tree differing only in line endings (proves SRC-07); plus content- and path-sensitivity.
+- [x] `Lockfile` Load/Save round-trips (go-cmp); `path` stored forward-slash; missing file → empty.
 
 **Verify**: `go test ./internal/lock/...`
 
