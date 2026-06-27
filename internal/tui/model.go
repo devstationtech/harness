@@ -112,16 +112,22 @@ func New(artifacts []artifact.Artifact, preselected map[artifact.Identity]bool, 
 func (m Model) Confirmed() bool { return m.confirmed }
 
 // Selected returns the artifacts the user checked, including capabilities chosen
-// on a composition screen.
+// on a composition screen. A capability is included only when the abstract skill
+// it implements is also selected — never as an orphan (e.g. after its abstract
+// is deselected), so it cannot linger in the manifest or AGENTS.md.
 func (m Model) Selected() []artifact.Artifact {
+	selectedAbstracts := make(map[string]bool)
 	var out []artifact.Artifact
 	for _, it := range m.items {
 		if it.selected {
 			out = append(out, it.artifact)
+			if it.artifact.IsAbstract() {
+				selectedAbstracts[it.artifact.Name] = true
+			}
 		}
 	}
 	for _, it := range m.capabilities {
-		if it.selected {
+		if it.selected && selectedAbstracts[it.artifact.Implements] {
 			out = append(out, it.artifact)
 		}
 	}

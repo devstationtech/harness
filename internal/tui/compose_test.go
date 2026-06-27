@@ -117,6 +117,25 @@ func TestApplyViewSelectsOnlyChosenCapabilities(t *testing.T) {
 	}
 }
 
+func TestSelectedPrunesOrphanCapability(t *testing.T) {
+	// @Given an abstract and its capability both selected (a configured project)
+	m := New([]artifact.Artifact{
+		abstract("lld", "domain"),
+		capability("lld-go", "lld", "domain"),
+	}, map[artifact.Identity]bool{
+		{Kind: artifact.KindSkill, Name: "lld"}:    true,
+		{Kind: artifact.KindSkill, Name: "lld-go"}: true,
+	}, "v", 0)
+
+	// @When the abstract is deselected in the list
+	m.items[0].selected = false
+
+	// @Then the capability is not selected on its own (no orphan leaks to save)
+	if selectedNames(m)["lld-go"] {
+		t.Error("capability should be pruned when its abstract is deselected")
+	}
+}
+
 func TestCycleWrapsThroughNone(t *testing.T) {
 	// @Given a contract with two candidates, nothing chosen
 	m := New([]artifact.Artifact{
