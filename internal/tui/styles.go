@@ -13,8 +13,9 @@ import "github.com/charmbracelet/lipgloss"
 // Tango "bright" palette the devstation theme intends.
 var (
 	canvas  = lipgloss.Color("#1e1e1e") // dark gray full-screen background
-	accent  = lipgloss.Color("#fe8019") // orange (primary accent)
-	textCol = lipgloss.Color("#d0d0d0")
+	accent  = lipgloss.Color("#c8895a") // muted/pastel orange (logo + details only)
+	textCol = lipgloss.Color("#d0d0d0") // light gray — body text
+	bright  = lipgloss.Color("#f0f0f0") // brighter gray — highlighted text (active row/tab)
 	muted   = lipgloss.Color("#8a8a8a")
 	faint   = lipgloss.Color("#585858")
 	border  = lipgloss.Color("#666666")
@@ -72,7 +73,7 @@ func newStyles() styles {
 		sectionHint: on().Foreground(muted),
 		cursor:      on().Foreground(accent).Bold(true),
 		name:        on().Foreground(textCol),
-		nameActive:  on().Foreground(accent).Bold(true),
+		nameActive:  on().Foreground(bright).Bold(true),
 		checkOn:     on().Foreground(success).Bold(true),
 		checkOff:    on().Foreground(faint),
 		description: on().Foreground(muted),
@@ -87,7 +88,7 @@ func newStyles() styles {
 		scrollTrack: on().Foreground(border),
 		warn:        on().Foreground(warning),
 		empty:       on().Foreground(muted),
-		tabActive:   lipgloss.NewStyle().Background(tabSel).Foreground(accent).Bold(true).Padding(0, 1),
+		tabActive:   lipgloss.NewStyle().Background(tabSel).Foreground(bright).Bold(true).Padding(0, 1),
 		tabInactive: lipgloss.NewStyle().Background(chipBg).Foreground(chipFg).Padding(0, 1),
 	}
 }
