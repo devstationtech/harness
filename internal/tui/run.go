@@ -13,6 +13,9 @@ type Result struct {
 	// Bindings is, per composed abstract skill, the capability chosen for each
 	// contract (a contract left unimplemented is omitted).
 	Bindings map[artifact.Identity]map[string]string
+	// Localized are artifacts the user asked to copy into the project's .agents,
+	// to be vendored (committed, overriding the shared one) on save.
+	Localized []artifact.Identity
 }
 
 // Run launches the full-screen selection UI over the merged catalog and blocks
@@ -34,5 +37,10 @@ func Run(
 		return Result{}, err
 	}
 	m := finalModel.(Model)
-	return Result{Confirmed: m.Confirmed(), Selected: m.Selected(), Bindings: m.Bindings()}, nil
+	return Result{
+		Confirmed: m.Confirmed(),
+		Selected:  m.Selected(),
+		Bindings:  m.Bindings(),
+		Localized: m.Localized(),
+	}, nil
 }

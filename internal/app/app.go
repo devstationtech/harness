@@ -114,9 +114,13 @@ func Run(out io.Writer, version string) error {
 		return nil
 	}
 
-	// Vendor any selections that come from a remote source, then persist the
-	// root manifest and AGENTS.md over the now-local set.
-	resolved, digests, err := materialize(result.Selected, projectRoot, home)
+	// Vendor any selections that come from a remote source or that the user
+	// asked to localize, then persist the root manifest and AGENTS.md.
+	localized := make(map[artifact.Identity]bool, len(result.Localized))
+	for _, id := range result.Localized {
+		localized[id] = true
+	}
+	resolved, digests, err := materialize(result.Selected, projectRoot, home, localized)
 	if err != nil {
 		return err
 	}
@@ -132,7 +136,7 @@ func Run(out io.Writer, version string) error {
 // project, returning the selection as it now lives locally plus the content
 // digest of each vendored artifact (keyed by identity). Local and shared
 // selections pass through untouched (they are referenced in place).
-func materialize(selected []artifact.Artifact, projectRoot, home string) ([]artifact.Artifact, map[artifact.Identity]string, error) {
+func materialize(selected []artifact.Artifact, projectRoot, home string, localized map[artifact.Identity]bool) ([]artifact.Artifact, map[artifact.Identity]string, error) {
 	remotes, err := config.LoadSources(config.SourcesConfigPath(home))
 	if err != nil {
 		return nil, nil, err
@@ -141,7 +145,8 @@ func materialize(selected []artifact.Artifact, projectRoot, home string) ([]arti
 	final := make([]artifact.Artifact, 0, len(selected))
 
 	for _, a := range selected {
-		if _, isRemote := remotes.Find(a.Origin); !isRemote {
+		_, isRemote := remotes.Find(a.Origin)
+		if !isRemote && !localized[a.Identity()] {
 			final = append(final, a)
 			continue
 		}

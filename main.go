@@ -43,6 +43,8 @@ func run(args []string) error {
 		return app.Upgrade(os.Stdout)
 	case "apply":
 		return app.Apply(os.Stdout)
+	case "vendor":
+		return app.Vendor(os.Stdout, args[1:])
 	case "version", "--version", "-v":
 		fmt.Fprintf(os.Stdout, "harness %s\n", version)
 		return nil
@@ -67,6 +69,7 @@ Usage:
   harness search Q    Search artifacts across all sources (offline)
   harness upgrade    Re-resolve this project's selections to the latest
   harness apply      Reconcile this project from its committed harness.yaml
+  harness vendor K/N Copy a shared/remote artifact into .agents (local override)
   harness version    Print the version
   harness help       Show this help
 

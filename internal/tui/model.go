@@ -42,6 +42,10 @@ const (
 type item struct {
 	artifact artifact.Artifact
 	selected bool
+	// localized marks a shared/remote artifact the user asked to copy into the
+	// project's .agents (committed, overriding the shared one). The copy itself
+	// happens on save, keeping the model free of I/O.
+	localized bool
 }
 
 // detailView holds the info page shown for a single artifact (opened with `i`).
@@ -212,6 +216,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "a":
 		m.toggleSection()
+	case "v", "V":
+		m.toggleLocalize()
 	case "i":
 		m.openDetail()
 	case "enter":
@@ -246,6 +252,34 @@ func (m *Model) moveCursor(delta int) {
 	if m.cursor >= len(m.items) {
 		m.cursor = len(m.items) - 1
 	}
+}
+
+// toggleLocalize flags (or unflags) the artifact under the cursor for a
+// committed local copy. Already-local artifacts have nothing to copy. Localizing
+// also selects the artifact, since you clearly want it active.
+func (m *Model) toggleLocalize() {
+	if len(m.items) == 0 {
+		return
+	}
+	it := &m.items[m.cursor]
+	if it.artifact.Source == artifact.SourceLocal && !it.localized {
+		return // already local content
+	}
+	it.localized = !it.localized
+	if it.localized {
+		it.selected = true
+	}
+}
+
+// Localized returns the identities of artifacts the user asked to copy locally.
+func (m Model) Localized() []artifact.Identity {
+	var out []artifact.Identity
+	for _, it := range m.items {
+		if it.localized {
+			out = append(out, it.artifact.Identity())
+		}
+	}
+	return out
 }
 
 // toggleSection flips every item that shares the kind under the cursor.
@@ -594,12 +628,13 @@ func (m Model) renderRow(index int, it item, inner int) string {
 		Render(truncate(it.artifact.Name, m.nameWidth))
 
 	label, sourceStyle := "shared", m.styles.badgeShared
-	if it.artifact.Source == artifact.SourceLocal {
-		if it.artifact.OverridesShared {
-			label, sourceStyle = "local*", m.styles.override
-		} else {
-			label, sourceStyle = "local", m.styles.badgeLocal
-		}
+	switch {
+	case it.localized:
+		label, sourceStyle = "→local", m.styles.override
+	case it.artifact.Source == artifact.SourceLocal && it.artifact.OverridesShared:
+		label, sourceStyle = "local*", m.styles.override
+	case it.artifact.Source == artifact.SourceLocal:
+		label, sourceStyle = "local", m.styles.badgeLocal
 	}
 	sourceCell := sourceStyle.Width(sourceColWidth).MaxWidth(sourceColWidth).Render(label)
 
@@ -614,7 +649,7 @@ func (m Model) renderRow(index int, it item, inner int) string {
 }
 
 func (m Model) renderFooter(inner int) string {
-	help := "↑/↓ move · space toggle · i info · a section · enter continue · q quit"
+	help := "↑/↓ move · space toggle · v localize · i info · enter continue · q quit"
 	scroll := ""
 	if total := m.bodyLineCount(); total > m.contentHeight() {
 		scroll = fmt.Sprintf(
