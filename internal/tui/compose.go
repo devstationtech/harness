@@ -2,7 +2,6 @@ package tui
 
 import (
 	"fmt"
-	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -118,49 +117,58 @@ func (m *Model) applyCompose() {
 	}
 }
 
-// renderCompose draws the composition screen: the abstract, one row per contract
-// with its chosen implementation, and a completeness status.
+// renderCompose draws the composition screen with the same base structure as the
+// main selection screen — the wordmark header, a titled box, and a footer — so
+// it feels like a sub-screen of the same tool rather than a separate page.
 func (m Model) renderCompose(inner int) string {
-	view := m.compose
-	parts := []string{
-		m.paint(inner, m.styles.nameActive.Render(view.abstract.Name)),
-		m.paint(inner, m.styles.subtitle.Render("compose — choose an implementation for each contract")),
-		m.styles.divider.Render(strings.Repeat("─", max(inner, 0))),
-	}
-	for index, choice := range view.contracts {
-		parts = append(parts, m.renderContractRow(index, choice, inner))
-	}
+	title := "compose · " + m.compose.abstract.Name
+	content := m.composeRows(inner - boxChromeCols)
+	return lipgloss.JoinVertical(
+		lipgloss.Left,
+		m.renderHeader(inner),
+		m.renderTitledBox(title, inner, content),
+		m.renderComposeFooter(inner),
+	)
+}
 
+// composeRows builds the box content: an intro line, one row per contract, and a
+// completeness status, padded/clamped to the available content height.
+func (m Model) composeRows(width int) []string {
+	rows := []string{
+		m.paint(width, m.styles.subtitle.Render("Choose an implementation for each contract")),
+		m.paint(width, ""),
+	}
+	for index, choice := range m.compose.contracts {
+		rows = append(rows, m.renderContractRow(index, choice, width))
+	}
+	rows = append(rows, m.paint(width, ""), m.paint(width, m.composeStatus()))
+
+	ch := m.contentHeight()
+	for len(rows) < ch {
+		rows = append(rows, m.paint(width, ""))
+	}
+	if len(rows) > ch {
+		rows = rows[:ch]
+	}
+	return rows
+}
+
+// composeStatus reports whether every contract has an implementation.
+func (m Model) composeStatus() string {
 	unbound := 0
-	for _, choice := range view.contracts {
+	for _, choice := range m.compose.contracts {
 		if choice.chosen < 0 {
 			unbound++
 		}
 	}
-	status := m.styles.count.Render("✓ composition complete")
 	if unbound > 0 {
-		status = m.styles.warn.Render(fmt.Sprintf("⚠ %d contract(s) without an implementation", unbound))
+		return m.styles.warn.Render(fmt.Sprintf("⚠ %d contract(s) without an implementation", unbound))
 	}
-	parts = append(parts, m.paint(inner, ""), m.paint(inner, status))
-
-	content := lipgloss.JoinVertical(lipgloss.Left, parts...)
-	avail := m.height - 2*vPad - footerRows
-	if avail < 1 {
-		avail = 1
-	}
-	lines := strings.Split(content, "\n")
-	if len(lines) > avail {
-		lines = lines[:avail]
-	}
-	for len(lines) < avail {
-		lines = append(lines, m.paint(inner, ""))
-	}
-	lines = append(lines, m.paint(inner, m.styles.footer.Render("↑/↓ contract · ←/→ choose · enter done · esc back")))
-	return lipgloss.JoinVertical(lipgloss.Left, lines...)
+	return m.styles.count.Render("✓ composition complete")
 }
 
-// renderContractRow draws one contract and its chosen capability.
-func (m Model) renderContractRow(index int, choice contractChoice, inner int) string {
+// renderContractRow draws one contract and its chosen capability, padded to width.
+func (m Model) renderContractRow(index int, choice contractChoice, width int) string {
 	const contractWidth = 18
 
 	cursor := m.styles.base.Render("  ")
@@ -171,7 +179,7 @@ func (m Model) renderContractRow(index int, choice contractChoice, inner int) st
 	}
 	contractCell := contractStyle.Width(contractWidth).MaxWidth(contractWidth).Render(truncate(choice.contract, contractWidth))
 
-	chosen := m.styles.checkOff.Render("— no implementation")
+	chosen := m.styles.checkOff.Render("[ ] no implementation")
 	if choice.chosen >= 0 {
 		capability := choice.candidates[choice.chosen]
 		label := capability.Name
@@ -187,7 +195,13 @@ func (m Model) renderContractRow(index int, choice contractChoice, inner int) st
 	}
 
 	line := cursor + contractCell + m.styles.base.Render("  ") + chosen + hint
-	return m.styles.base.Width(inner).MaxWidth(inner).Render(line)
+	return m.styles.base.Width(width).MaxWidth(width).Render(line)
+}
+
+// renderComposeFooter mirrors the main footer with composition-specific help.
+func (m Model) renderComposeFooter(inner int) string {
+	help := "↑/↓ contract · ←/→ choose · enter done · esc back · ctrl+c quit"
+	return m.styles.base.Width(inner).MaxWidth(inner).Render(m.styles.footer.Render(help))
 }
 
 // clampIndex bounds i to [0, length-1] (returns 0 when length is 0).
