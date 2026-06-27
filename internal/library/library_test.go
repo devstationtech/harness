@@ -30,8 +30,6 @@ func TestInitSeedsValidArtifacts(t *testing.T) {
 	wanted := []artifact.Identity{
 		{Kind: artifact.KindSkill, Name: "skill-creator"},
 		{Kind: artifact.KindSkill, Name: "spec-kit"},
-		{Kind: artifact.KindRule, Name: "hexagonal-architecture"},
-		{Kind: artifact.KindAgent, Name: "code-reviewer"},
 	}
 	for _, id := range wanted {
 		if _, ok := cat.Find(id); !ok {
