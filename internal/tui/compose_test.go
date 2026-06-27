@@ -23,6 +23,10 @@ func capability(name, implements string, provides ...string) artifact.Artifact {
 	return a
 }
 
+func selectedID(name string) map[artifact.Identity]bool {
+	return map[artifact.Identity]bool{{Kind: artifact.KindSkill, Name: name}: true}
+}
+
 func chooseByName(t *testing.T, view *composeView, contract, capabilityName string) {
 	t.Helper()
 	for i := range view.contracts {
@@ -48,78 +52,94 @@ func selectedNames(m Model) map[string]bool {
 	return out
 }
 
-func TestOpenComposeBuildsContractsWithCandidates(t *testing.T) {
-	// @Given an abstract and two capabilities, cursor on the abstract
+func TestStartWizardComposesSelectedAbstracts(t *testing.T) {
+	// @Given a selected abstract with two contracts and two capabilities
 	m := New([]artifact.Artifact{
 		abstract("lld", "domain", "persistence"),
 		capability("lld-ts", "lld", "domain", "persistence"),
 		capability("lld-go", "lld", "domain"),
-	}, nil, "v", 0)
+	}, selectedID("lld"), "v", 0)
 
-	// @When the composition screen opens
-	m.openCompose()
+	// @When the wizard starts
+	next, _ := m.startWizard()
+	m = next.(Model)
 
-	// @Then it has one entry per contract with the right candidates
-	if m.compose == nil || len(m.compose.contracts) != 2 {
-		t.Fatalf("compose not built: %+v", m.compose)
+	// @Then it enters the compose step with one composition and the right candidates
+	if m.step != stepCompose || len(m.compositions) != 1 {
+		t.Fatalf("wizard not started: step=%d compositions=%d", m.step, len(m.compositions))
 	}
-	if got := len(m.compose.contracts[0].candidates); got != 2 { // domain: ts + go
-		t.Errorf("domain candidates = %d, want 2", got)
+	view := m.compositions[0]
+	if len(view.contracts[0].candidates) != 2 { // domain: ts + go
+		t.Errorf("domain candidates = %d, want 2", len(view.contracts[0].candidates))
 	}
-	if got := len(m.compose.contracts[1].candidates); got != 1 { // persistence: ts only
-		t.Errorf("persistence candidates = %d, want 1", got)
-	}
-	// @And the abstract itself is now selected
-	if !selectedNames(m)["lld"] {
-		t.Error("abstract should be selected on compose")
+	if len(view.contracts[1].candidates) != 1 { // persistence: ts only
+		t.Errorf("persistence candidates = %d, want 1", len(view.contracts[1].candidates))
 	}
 }
 
-func TestApplyComposeSelectsOnlyChosenCapabilities(t *testing.T) {
-	// @Given a composition with two capabilities available per contract
+func TestStartWizardWithNoAbstractSavesImmediately(t *testing.T) {
+	// @Given only a plain skill selected
+	m := New([]artifact.Artifact{skill("plain")}, selectedID("plain"), "v", 0)
+
+	// @When the wizard starts
+	next, _ := m.startWizard()
+	m = next.(Model)
+
+	// @Then it confirms (saves) without a composition step
+	if !m.Confirmed() {
+		t.Error("expected an immediate save when no abstracts are selected")
+	}
+}
+
+func TestApplyViewSelectsOnlyChosenCapabilities(t *testing.T) {
+	// @Given a started wizard with two capabilities available
 	m := New([]artifact.Artifact{
 		abstract("lld", "domain", "persistence"),
 		capability("lld-ts", "lld", "domain", "persistence"),
 		capability("lld-go", "lld", "domain", "persistence"),
-	}, nil, "v", 0)
-	m.openCompose()
+	}, selectedID("lld"), "v", 0)
+	next, _ := m.startWizard()
+	m = next.(Model)
+	view := m.compositions[0]
 
-	// @When lld-ts is chosen for both contracts
-	chooseByName(t, m.compose, "domain", "lld-ts")
-	chooseByName(t, m.compose, "persistence", "lld-ts")
-	m.applyCompose()
+	// @When lld-ts is chosen for both contracts and applied
+	chooseByName(t, view, "domain", "lld-ts")
+	chooseByName(t, view, "persistence", "lld-ts")
+	m.applyView(view)
 
-	// @Then only lld-ts (and the abstract) are selected; lld-go is not
+	// @Then only lld-ts (and the abstract) are selected
 	selected := selectedNames(m)
 	if !selected["lld"] || !selected["lld-ts"] {
-		t.Errorf("expected lld and lld-ts selected, got %v", selected)
+		t.Errorf("expected lld and lld-ts, got %v", selected)
 	}
 	if selected["lld-go"] {
 		t.Errorf("lld-go should not be selected, got %v", selected)
 	}
 }
 
-func TestCycleChoiceWrapsThroughNone(t *testing.T) {
+func TestCycleWrapsThroughNone(t *testing.T) {
 	// @Given a contract with two candidates, nothing chosen
 	m := New([]artifact.Artifact{
 		abstract("lld", "domain"),
 		capability("lld-ts", "lld", "domain"),
 		capability("lld-go", "lld", "domain"),
-	}, nil, "v", 0)
-	m.openCompose()
+	}, selectedID("lld"), "v", 0)
+	next, _ := m.startWizard()
+	m = next.(Model)
+	view := m.compositions[0]
 
-	// @When cycling forward three times
+	// @When cycling forward through every option
 	// @Then it goes none → first → second → none
-	if m.compose.contracts[0].chosen != -1 {
-		t.Fatalf("initial choice = %d, want -1", m.compose.contracts[0].chosen)
+	if view.contracts[0].chosen != -1 {
+		t.Fatalf("initial = %d, want -1", view.contracts[0].chosen)
 	}
-	m.cycleChoice(1)
-	if m.compose.contracts[0].chosen != 0 {
-		t.Errorf("after one cycle = %d, want 0", m.compose.contracts[0].chosen)
+	cycle(view, 1)
+	if view.contracts[0].chosen != 0 {
+		t.Errorf("after one cycle = %d, want 0", view.contracts[0].chosen)
 	}
-	m.cycleChoice(1)
-	m.cycleChoice(1)
-	if m.compose.contracts[0].chosen != -1 {
-		t.Errorf("after wrapping = %d, want -1", m.compose.contracts[0].chosen)
+	cycle(view, 1)
+	cycle(view, 1)
+	if view.contracts[0].chosen != -1 {
+		t.Errorf("after wrapping = %d, want -1", view.contracts[0].chosen)
 	}
 }

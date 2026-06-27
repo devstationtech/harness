@@ -9,10 +9,17 @@ import (
 	"github.com/devstationtech/harness/internal/artifact"
 )
 
-// composeView is the composition screen for one abstract skill: it lets the user
-// choose a capability for each of the abstract's contracts. Choices are applied
-// back to the selection (the chosen capabilities become checked) on return, so
-// the existing save flow derives the bindings.
+// step is the wizard stage the selection screen is in.
+type step int
+
+const (
+	stepSelect  step = iota // the artifact list
+	stepCompose             // composing one abstract skill
+	stepConfirm             // final review / save
+)
+
+// composeView is the composition screen for one abstract skill: a capability is
+// chosen for each of the abstract's contracts.
 type composeView struct {
 	abstract  artifact.Artifact
 	contracts []contractChoice
@@ -26,27 +33,28 @@ type contractChoice struct {
 	chosen     int // index into candidates, or -1 for "no implementation"
 }
 
-// abstractUnderCursor returns the abstract artifact under the cursor, if any.
-func (m Model) abstractUnderCursor() (artifact.Artifact, bool) {
-	if len(m.items) == 0 {
-		return artifact.Artifact{}, false
+// startWizard advances from the selection list. With no abstract skills
+// selected it saves immediately; otherwise it opens a composition screen for
+// each selected abstract, in order, ending at a confirmation step.
+func (m Model) startWizard() (tea.Model, tea.Cmd) {
+	m.compositions = nil
+	for _, it := range m.items {
+		if it.selected && it.artifact.IsAbstract() {
+			m.compositions = append(m.compositions, m.newComposition(it.artifact))
+		}
 	}
-	a := m.items[m.cursor].artifact
-	if a.IsAbstract() {
-		return a, true
+	if len(m.compositions) == 0 {
+		m.confirmed = true
+		return m, tea.Quit
 	}
-	return artifact.Artifact{}, false
+	m.step = stepCompose
+	m.composeIndex = 0
+	return m, nil
 }
 
-// openCompose builds the composition screen for the abstract under the cursor
-// and selects the abstract (composing it makes it part of the selection).
-func (m *Model) openCompose() {
-	abstract, ok := m.abstractUnderCursor()
-	if !ok {
-		return
-	}
-	m.items[m.cursor].selected = true
-
+// newComposition builds the composition screen for one abstract skill,
+// pre-selecting any capability already chosen.
+func (m Model) newComposition(abstract artifact.Artifact) *composeView {
 	view := &composeView{abstract: abstract}
 	for _, contract := range abstract.Contracts {
 		choice := contractChoice{contract: contract, chosen: -1}
@@ -61,119 +69,127 @@ func (m *Model) openCompose() {
 		}
 		view.contracts = append(view.contracts, choice)
 	}
-	m.compose = view
+	return view
 }
 
-// handleComposeKey handles keys on the composition screen.
+// handleComposeKey handles keys on a composition step: navigate contracts, cycle
+// the chosen capability, advance to the next abstract (or the confirm step), or
+// step back to the previous abstract (or the list).
 func (m Model) handleComposeKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	view := m.compositions[m.composeIndex]
 	switch msg.String() {
 	case "ctrl+c":
 		return m, tea.Quit
 	case "up", "k":
-		m.compose.cursor = clampIndex(m.compose.cursor-1, len(m.compose.contracts))
+		view.cursor = clampIndex(view.cursor-1, len(view.contracts))
 	case "down", "j":
-		m.compose.cursor = clampIndex(m.compose.cursor+1, len(m.compose.contracts))
+		view.cursor = clampIndex(view.cursor+1, len(view.contracts))
 	case "left", "h":
-		m.cycleChoice(-1)
+		cycle(view, -1)
 	case "right", "l", " ":
-		m.cycleChoice(1)
-	case "enter", "esc", "q", "backspace":
-		m.applyCompose()
-		m.compose = nil
+		cycle(view, 1)
+	case "enter":
+		m.applyView(view)
+		if m.composeIndex < len(m.compositions)-1 {
+			m.composeIndex++
+		} else {
+			m.step = stepConfirm
+		}
+	case "esc", "backspace":
+		m.applyView(view)
+		if m.composeIndex > 0 {
+			m.composeIndex--
+		} else {
+			m.step = stepSelect
+		}
 	}
 	return m, nil
 }
 
-// cycleChoice moves the focused contract's choice through its candidates and the
+// cycle moves the focused contract's choice through its candidates and the
 // "no implementation" option, wrapping around.
-func (m *Model) cycleChoice(delta int) {
-	if m.compose == nil || len(m.compose.contracts) == 0 {
+func cycle(view *composeView, delta int) {
+	if len(view.contracts) == 0 {
 		return
 	}
-	choice := &m.compose.contracts[m.compose.cursor]
+	choice := &view.contracts[view.cursor]
 	options := len(choice.candidates) + 1 // +1 for "no implementation"
 	index := choice.chosen + 1
 	index = ((index+delta)%options + options) % options
 	choice.chosen = index - 1
 }
 
-// applyCompose folds the screen's choices back into the selection: every chosen
-// capability is checked and every other capability of this abstract is unchecked.
-func (m *Model) applyCompose() {
-	if m.compose == nil {
-		return
-	}
+// applyView folds one composition's choices into the selection: every chosen
+// capability is checked, every other capability of that abstract unchecked.
+func (m *Model) applyView(view *composeView) {
 	chosen := make(map[artifact.Identity]bool)
-	for _, choice := range m.compose.contracts {
+	for _, choice := range view.contracts {
 		if choice.chosen >= 0 {
 			chosen[choice.candidates[choice.chosen].Identity()] = true
 		}
 	}
-	abstractName := m.compose.abstract.Name
 	for i := range m.capabilities {
-		if m.capabilities[i].artifact.Implements == abstractName {
+		if m.capabilities[i].artifact.Implements == view.abstract.Name {
 			m.capabilities[i].selected = chosen[m.capabilities[i].artifact.Identity()]
 		}
 	}
 }
 
-// renderCompose draws the composition screen with the same base structure as the
-// main selection screen — the wordmark header, a titled box, and a footer — so
-// it feels like a sub-screen of the same tool rather than a separate page.
+// handleConfirmKey handles the final review step: save, go back to the start, or
+// quit without saving.
+func (m Model) handleConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "enter":
+		m.confirmed = true
+		return m, tea.Quit
+	case "b", "left", "esc":
+		m.step = stepSelect
+	case "q", "ctrl+c":
+		return m, tea.Quit
+	}
+	return m, nil
+}
+
+// --- rendering ---
+
+// renderCompose draws a composition step with the main screen's base structure:
+// wordmark header, titled box, footer.
 func (m Model) renderCompose(inner int) string {
-	title := "compose · " + m.compose.abstract.Name
-	content := m.composeRows(inner - boxChromeCols)
+	view := m.compositions[m.composeIndex]
+	title := "compose · " + view.abstract.Name
+	if len(m.compositions) > 1 {
+		title += fmt.Sprintf("  (%d/%d)", m.composeIndex+1, len(m.compositions))
+	}
+	content := m.composeRows(view, inner-boxChromeCols)
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
 		m.renderHeader(inner),
 		m.renderTitledBox(title, inner, content),
-		m.renderComposeFooter(inner),
+		m.footerLine(inner, "↑/↓ contract · ←/→ choose · enter next · esc back · ctrl+c quit"),
 	)
 }
 
-// composeRows builds the box content: an intro line, one row per contract, and a
-// completeness status, padded/clamped to the available content height.
-func (m Model) composeRows(width int) []string {
+// composeRows builds the box content for one composition, padded to the content
+// height.
+func (m Model) composeRows(view *composeView, width int) []string {
 	rows := []string{
 		m.paint(width, m.styles.subtitle.Render("Choose an implementation for each contract")),
 		m.paint(width, ""),
 	}
-	for index, choice := range m.compose.contracts {
-		rows = append(rows, m.renderContractRow(index, choice, width))
+	for index, choice := range view.contracts {
+		rows = append(rows, m.renderContractRow(view, index, choice, width))
 	}
-	rows = append(rows, m.paint(width, ""), m.paint(width, m.composeStatus()))
-
-	ch := m.contentHeight()
-	for len(rows) < ch {
-		rows = append(rows, m.paint(width, ""))
-	}
-	if len(rows) > ch {
-		rows = rows[:ch]
-	}
-	return rows
-}
-
-// composeStatus reports whether every contract has an implementation.
-func (m Model) composeStatus() string {
-	unbound := 0
-	for _, choice := range m.compose.contracts {
-		if choice.chosen < 0 {
-			unbound++
-		}
-	}
-	if unbound > 0 {
-		return m.styles.warn.Render(fmt.Sprintf("⚠ %d contract(s) without an implementation", unbound))
-	}
-	return m.styles.count.Render("✓ composition complete")
+	rows = append(rows, m.paint(width, ""), m.paint(width, composeStatus(view, m.styles)))
+	return m.fitRows(rows, width)
 }
 
 // renderContractRow draws one contract and its chosen capability, padded to width.
-func (m Model) renderContractRow(index int, choice contractChoice, width int) string {
+func (m Model) renderContractRow(view *composeView, index int, choice contractChoice, width int) string {
 	const contractWidth = 18
 
 	cursor := m.styles.base.Render("  ")
 	contractStyle := m.styles.name
-	if index == m.compose.cursor {
+	if index == view.cursor {
 		cursor = m.styles.cursor.Render("› ")
 		contractStyle = m.styles.nameActive
 	}
@@ -198,10 +214,82 @@ func (m Model) renderContractRow(index int, choice contractChoice, width int) st
 	return m.styles.base.Width(width).MaxWidth(width).Render(line)
 }
 
-// renderComposeFooter mirrors the main footer with composition-specific help.
-func (m Model) renderComposeFooter(inner int) string {
-	help := "↑/↓ contract · ←/→ choose · enter done · esc back · ctrl+c quit"
+// composeStatus reports whether every contract of a view has an implementation.
+func composeStatus(view *composeView, s styles) string {
+	unbound := unboundCount(view)
+	if unbound > 0 {
+		return s.warn.Render(fmt.Sprintf("⚠ %d contract(s) without an implementation", unbound))
+	}
+	return s.count.Render("✓ composition complete")
+}
+
+func unboundCount(view *composeView) int {
+	unbound := 0
+	for _, choice := range view.contracts {
+		if choice.chosen < 0 {
+			unbound++
+		}
+	}
+	return unbound
+}
+
+// renderConfirm draws the final review step: counts, per-composition status, and
+// the save/back/quit choices.
+func (m Model) renderConfirm(inner int) string {
+	content := m.confirmRows(inner - boxChromeCols)
+	return lipgloss.JoinVertical(
+		lipgloss.Left,
+		m.renderHeader(inner),
+		m.renderTitledBox("review", inner, content),
+		m.footerLine(inner, "enter save · b back to start · q quit"),
+	)
+}
+
+// confirmRows summarises the selection and the composition completeness.
+func (m Model) confirmRows(width int) []string {
+	rows := []string{
+		m.paint(width, m.styles.subtitle.Render("Review — saving writes harness.yaml and AGENTS.md")),
+		m.paint(width, ""),
+	}
+
+	counts := map[artifact.Kind]int{}
+	for _, a := range m.Selected() {
+		counts[a.Kind]++
+	}
+	for _, kind := range artifact.Kinds() {
+		rows = append(rows, m.paint(width, m.styles.name.Render(fmt.Sprintf("  %-7s %d selected", kind.Title(), counts[kind]))))
+	}
+	rows = append(rows, m.paint(width, ""))
+
+	for _, view := range m.compositions {
+		if unbound := unboundCount(view); unbound > 0 {
+			rows = append(rows, m.paint(width, m.styles.warn.Render(
+				fmt.Sprintf("  ⚠ %s — %d contract(s) without an implementation", view.abstract.Name, unbound),
+			)))
+		} else {
+			rows = append(rows, m.paint(width, m.styles.count.Render(
+				fmt.Sprintf("  ✓ %s — fully composed", view.abstract.Name),
+			)))
+		}
+	}
+	return m.fitRows(rows, width)
+}
+
+// footerLine renders a single help line across the inner width.
+func (m Model) footerLine(inner int, help string) string {
 	return m.styles.base.Width(inner).MaxWidth(inner).Render(m.styles.footer.Render(help))
+}
+
+// fitRows pads or clamps rows to the content height.
+func (m Model) fitRows(rows []string, width int) []string {
+	ch := m.contentHeight()
+	for len(rows) < ch {
+		rows = append(rows, m.paint(width, ""))
+	}
+	if len(rows) > ch {
+		rows = rows[:ch]
+	}
+	return rows
 }
 
 // clampIndex bounds i to [0, length-1] (returns 0 when length is 0).

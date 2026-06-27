@@ -69,8 +69,13 @@ type Model struct {
 	height       int
 	warnings     int // count of artifacts skipped while loading
 	confirmed    bool
-	detail       *detailView  // non-nil while the info page is open
-	compose      *composeView // non-nil while the composition screen is open
+	detail       *detailView // non-nil while the info page is open
+
+	// Wizard state: after the selection list, the user steps through a
+	// composition screen per selected abstract skill, then a confirmation step.
+	step         step
+	compositions []*composeView
+	composeIndex int
 }
 
 // New builds a selection model from the merged catalog. Artifacts whose identity
@@ -132,13 +137,17 @@ func (m Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 		m.ensureVisible()
 	case tea.KeyMsg:
-		if m.compose != nil {
-			return m.handleComposeKey(msg)
-		}
 		if m.detail != nil {
 			return m.handleDetailKey(msg)
 		}
-		return m.handleKey(msg)
+		switch m.step {
+		case stepCompose:
+			return m.handleComposeKey(msg)
+		case stepConfirm:
+			return m.handleConfirmKey(msg)
+		default:
+			return m.handleKey(msg)
+		}
 	}
 	return m, nil
 }
@@ -178,14 +187,11 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "i":
 		m.openDetail()
 	case "enter":
-		// On an abstract skill, enter opens the composition screen; otherwise
-		// it confirms and saves.
-		if _, ok := m.abstractUnderCursor(); ok {
-			m.openCompose()
-			return m, nil
-		}
-		m.confirmed = true
-		return m, tea.Quit
+		// Enter always advances the wizard: it composes each selected abstract
+		// in turn, then reaches the confirmation step. With no abstracts
+		// selected it saves immediately. (This is also how you save when only
+		// abstract skills are selected.)
+		return m.startWizard()
 	}
 	m.ensureVisible()
 	return m, nil
@@ -302,10 +308,12 @@ func (m Model) View() string {
 
 	var doc string
 	switch {
-	case m.compose != nil:
-		doc = m.renderCompose(inner)
 	case m.detail != nil:
 		doc = m.renderDetail(inner)
+	case m.step == stepCompose:
+		doc = m.renderCompose(inner)
+	case m.step == stepConfirm:
+		doc = m.renderConfirm(inner)
 	case len(m.items) == 0:
 		doc = m.renderEmpty(inner)
 	default:
@@ -578,7 +586,7 @@ func (m Model) renderRow(index int, it item, inner int) string {
 }
 
 func (m Model) renderFooter(inner int) string {
-	help := "↑/↓ move · space toggle · i info · a section · enter save/compose · q quit"
+	help := "↑/↓ move · space toggle · i info · a section · enter continue · q quit"
 	scroll := ""
 	if total := m.bodyLineCount(); total > m.contentHeight() {
 		scroll = fmt.Sprintf(
