@@ -15,6 +15,7 @@ var (
 	border  = lipgloss.Color("#666666")
 	chipBg  = lipgloss.Color("#323232")
 	chipFg  = lipgloss.Color("#aeaeae")
+	tabSel  = lipgloss.Color("#4d4d4d") // lighter chip tone for the active tab
 	success = lipgloss.Color("10")
 	warning = lipgloss.Color("11")
 	sharedC = lipgloss.Color("39") // calm blue for the "shared" source
@@ -81,7 +82,7 @@ func newStyles() styles {
 		scrollTrack: on().Foreground(border),
 		warn:        on().Foreground(warning),
 		empty:       on().Foreground(muted),
-		tabActive:   on().Foreground(accent).Bold(true).Underline(true),
-		tabInactive: on().Foreground(muted),
+		tabActive:   lipgloss.NewStyle().Background(tabSel).Foreground(accent).Bold(true).Padding(0, 1),
+		tabInactive: lipgloss.NewStyle().Background(chipBg).Foreground(chipFg).Padding(0, 1),
 	}
 }

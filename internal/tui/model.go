@@ -623,10 +623,10 @@ func (m Model) tabsTitle() string {
 	builder.WriteString(m.paint(1, "")) // leading space inside the border
 	for i, kind := range m.tabKinds() {
 		if i > 0 {
-			builder.WriteString(m.paint(2, "")) // gap between tabs
+			builder.WriteString(m.paint(1, "")) // canvas gap separating the tab backgrounds
 		}
 		selected, total := m.sectionCounts(kind)
-		label := fmt.Sprintf("%s %d/%d", kind.Title(), selected, total)
+		label := fmt.Sprintf("%s %d/%d", strings.ToLower(kind.Title()), selected, total)
 		if kind == m.activeKind {
 			builder.WriteString(m.styles.tabActive.Render(label))
 		} else {
