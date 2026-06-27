@@ -2,9 +2,11 @@ package source
 
 import (
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/devstationtech/harness/internal/artifact"
 )
@@ -27,13 +29,29 @@ func NewLocalDirectory(name, base string, tag artifact.Source) LocalDirectory {
 // Name reports the source identifier.
 func (d LocalDirectory) Name() string { return d.name }
 
-// Resolve scans every kind container under the base directory. A directory
-// without an entry document is not an artifact and is ignored silently; a
-// directory whose entry document is malformed is reported as an Issue.
+// Resolve reads the artifacts under the base directory. When the base contains
+// a package manifest (harness.artifacts.yaml) it is authoritative — artifacts
+// are resolved from its entries, with versions. Otherwise the base is scanned by
+// directory convention (skills/, rules/, agents/) and artifacts are unversioned.
 func (d LocalDirectory) Resolve() ([]artifact.Artifact, []Issue, error) {
 	if d.base == "" {
 		return nil, nil, nil
 	}
+	manifest, present, err := LoadArtifactsManifest(filepath.Join(d.base, ArtifactsManifestFile))
+	if err != nil {
+		return nil, nil, err
+	}
+	if present {
+		found, issues := d.resolveFromManifest(manifest)
+		return found, issues, nil
+	}
+	return d.resolveByConvention()
+}
+
+// resolveByConvention scans every kind container under the base. A directory
+// without an entry document is not an artifact and is ignored silently; a
+// directory whose entry document is malformed is reported as an Issue.
+func (d LocalDirectory) resolveByConvention() ([]artifact.Artifact, []Issue, error) {
 	var found []artifact.Artifact
 	var issues []Issue
 	for _, kind := range artifact.Kinds() {
@@ -54,6 +72,73 @@ func (d LocalDirectory) Resolve() ([]artifact.Artifact, []Issue, error) {
 		}
 	}
 	return found, issues, nil
+}
+
+// resolveFromManifest resolves exactly the artifacts the package manifest
+// lists. A bad entry (unknown kind, invalid version, escaping path, name
+// mismatch, missing document, duplicate) is reported as an Issue and skipped.
+func (d LocalDirectory) resolveFromManifest(manifest ArtifactsManifest) ([]artifact.Artifact, []Issue) {
+	var found []artifact.Artifact
+	var issues []Issue
+	seen := make(map[artifact.Identity]bool)
+	for _, entry := range manifest.Artifacts {
+		a, issue := d.resolveEntry(entry, seen)
+		if issue != nil {
+			issues = append(issues, *issue)
+			continue
+		}
+		found = append(found, a)
+	}
+	return found, issues
+}
+
+// resolveEntry validates and loads one manifest entry.
+func (d LocalDirectory) resolveEntry(entry ArtifactEntry, seen map[artifact.Identity]bool) (artifact.Artifact, *Issue) {
+	kind, ok := artifact.ParseKind(entry.Kind)
+	if !ok {
+		return artifact.Artifact{}, manifestIssue(entry, fmt.Sprintf("unknown kind %q", entry.Kind))
+	}
+	if entry.Version != "" {
+		if err := artifact.ValidateVersion(entry.Version); err != nil {
+			return artifact.Artifact{}, manifestIssue(entry, err.Error())
+		}
+	}
+	directory, ok := d.resolveWithinBase(entry.Path)
+	if !ok {
+		return artifact.Artifact{}, manifestIssue(entry, fmt.Sprintf("path %q escapes the source", entry.Path))
+	}
+	id := artifact.Identity{Kind: kind, Name: entry.Name}
+	if seen[id] {
+		return artifact.Artifact{}, manifestIssue(entry, "duplicate entry")
+	}
+	seen[id] = true
+
+	a, err := d.read(kind, entry.Name, directory)
+	if err != nil {
+		return artifact.Artifact{}, &Issue{Path: artifact.EntryFileFor(kind, directory), Reason: err.Error()}
+	}
+	a.Version = entry.Version
+	return a, nil
+}
+
+// resolveWithinBase converts a forward-slash manifest path to an absolute
+// directory, rejecting anything that escapes the source base.
+func (d LocalDirectory) resolveWithinBase(path string) (string, bool) {
+	directory := filepath.Join(d.base, filepath.FromSlash(path))
+	within, err := filepath.Rel(d.base, directory)
+	if err != nil || within == ".." || strings.HasPrefix(within, ".."+string(filepath.Separator)) {
+		return "", false
+	}
+	return directory, true
+}
+
+// manifestIssue builds an Issue attributed to the package manifest for a bad
+// entry, mentioning the kind and name.
+func manifestIssue(entry ArtifactEntry, reason string) *Issue {
+	return &Issue{
+		Path:   ArtifactsManifestFile,
+		Reason: fmt.Sprintf("%s %q: %s", entry.Kind, entry.Name, reason),
+	}
 }
 
 // collect appends the artifact at directory to found, or records an Issue, or

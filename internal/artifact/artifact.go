@@ -30,6 +30,17 @@ const (
 // Kinds returns every supported kind in canonical display order.
 func Kinds() []Kind { return []Kind{KindRule, KindSkill, KindAgent} }
 
+// ParseKind returns the Kind for its string form, or false if it is unknown.
+func ParseKind(s string) (Kind, bool) {
+	candidate := Kind(s)
+	for _, known := range Kinds() {
+		if known == candidate {
+			return candidate, true
+		}
+	}
+	return "", false
+}
+
 // Container is the plural directory that holds artifacts of this kind, e.g.
 // "skills". It is identical under both the shared library and a project.
 func (kind Kind) Container() string {
