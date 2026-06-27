@@ -28,11 +28,13 @@ func run(args []string) error {
 
 	switch command {
 	case "", "select":
-		return app.Run(os.Stdout)
+		return app.Run(os.Stdout, version)
 	case "init":
 		return app.Init(os.Stdout)
 	case "list", "ls":
 		return app.List(os.Stdout)
+	case "source":
+		return app.Source(os.Stdout, args[1:])
 	case "version", "--version", "-v":
 		fmt.Fprintf(os.Stdout, "harness %s\n", version)
 		return nil
@@ -52,10 +54,17 @@ Usage:
   harness            Select artifacts for the current project (interactive)
   harness init       Create and seed the shared library (~/.harness)
   harness list       List the merged catalog as plain text
+  harness source …   Manage artifact sources (add | list | remove)
   harness version    Print the version
   harness help       Show this help
 
-Artifacts live under ~/.harness (shared) and .agents (project-local), using:
+Sources:
+  harness source add <git-url> [--name NAME] [--ref REF]
+  harness source list
+  harness source remove <name>
+
+Artifacts live under ~/.harness (shared), .agents (project-local) and any
+configured git source, using:
   skills/<name>/SKILL.md   rules/<name>/RULE.md   agents/<name>/AGENT.md
 `)
 }

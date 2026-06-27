@@ -25,6 +25,11 @@ type Lockfile struct {
 	Artifacts []Entry `yaml:"artifacts"`
 }
 
+// New builds a lockfile at the current schema version from a set of entries.
+func New(entries []Entry) Lockfile {
+	return Lockfile{Version: lockVersion, Artifacts: entries}
+}
+
 // Entry pins one vendored artifact to its source and content.
 type Entry struct {
 	Kind        string `yaml:"kind"`

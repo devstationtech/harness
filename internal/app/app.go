@@ -3,16 +3,22 @@
 package app
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
+	"os"
 	"sort"
 
 	"github.com/devstationtech/harness/internal/artifact"
 	"github.com/devstationtech/harness/internal/catalog"
 	"github.com/devstationtech/harness/internal/config"
 	"github.com/devstationtech/harness/internal/library"
+	"github.com/devstationtech/harness/internal/lock"
 	"github.com/devstationtech/harness/internal/source"
 	"github.com/devstationtech/harness/internal/tui"
+	"github.com/devstationtech/harness/internal/vendor"
 	"github.com/devstationtech/harness/internal/workspace"
 )
 
@@ -42,7 +48,7 @@ func Init(out io.Writer) error {
 
 // List prints the merged catalog for the current project as plain text.
 func List(out io.Writer) error {
-	cat, _, err := loadCatalog()
+	cat, _, _, err := loadCatalog()
 	if err != nil {
 		return err
 	}
@@ -83,7 +89,7 @@ func printIssues(out io.Writer, issues []source.Issue) {
 
 // Run launches the interactive selection TUI and persists the chosen artifacts.
 func Run(out io.Writer, version string) error {
-	cat, projectRoot, err := loadCatalog()
+	cat, projectRoot, home, err := loadCatalog()
 	if err != nil {
 		return err
 	}
@@ -104,33 +110,132 @@ func Run(out io.Writer, version string) error {
 		return nil
 	}
 
-	if err := workspace.Apply(projectRoot, result.Selected); err != nil {
+	// Vendor any selections that come from a remote source, locking them, then
+	// persist the manifest and AGENTS.md over the now-local set.
+	resolved, entries, err := materialize(result.Selected, projectRoot, home)
+	if err != nil {
 		return err
 	}
-	printSaveSummary(out, projectRoot, result.Selected)
+	if err := writeLock(projectRoot, entries); err != nil {
+		return err
+	}
+	if err := workspace.Apply(projectRoot, resolved); err != nil {
+		return err
+	}
+	printSaveSummary(out, projectRoot, resolved)
 	printIssues(out, cat.Issues())
 	return nil
 }
 
-func loadCatalog() (catalog.Catalog, string, error) {
+// materialize vendors every selection that comes from a remote source into the
+// project, returning the selection as it now lives locally plus the lock entries
+// that pin the vendored artifacts. Local and shared selections pass through
+// untouched (they are referenced in place).
+func materialize(selected []artifact.Artifact, projectRoot, home string) ([]artifact.Artifact, []lock.Entry, error) {
+	remotes, err := config.LoadSources(config.SourcesConfigPath(home))
+	if err != nil {
+		return nil, nil, err
+	}
+	commits := make(map[string]string)
+	final := make([]artifact.Artifact, 0, len(selected))
+	var entries []lock.Entry
+
+	for _, a := range selected {
+		remote, isRemote := remotes.Find(a.Origin)
+		if !isRemote {
+			final = append(final, a)
+			continue
+		}
+		commit, known := commits[a.Origin]
+		if !known {
+			commit = resolveCommit(home, remote)
+			commits[a.Origin] = commit
+		}
+		vendored, entry, err := vendor.Vendor(a, projectRoot, commit)
+		if err != nil {
+			return nil, nil, err
+		}
+		final = append(final, vendored)
+		entries = append(entries, entry)
+	}
+	return final, entries, nil
+}
+
+// resolveCommit reports the checked-out commit of a remote source for
+// provenance. It is best-effort: an empty string is recorded if git cannot be
+// queried.
+func resolveCommit(home string, s config.SourceConfig) string {
+	repo := source.NewGitRepository(s.Name, s.URL, s.Ref, config.SourceCloneDir(home, s.Name), artifact.SourceShared)
+	commit, err := repo.Commit(context.Background())
+	if err != nil {
+		return ""
+	}
+	return commit
+}
+
+// writeLock persists the lock entries for a project, or removes a stale lockfile
+// when nothing remote is vendored.
+func writeLock(projectRoot string, entries []lock.Entry) error {
+	path := config.LockPath(projectRoot)
+	if len(entries) == 0 {
+		if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return err
+		}
+		return nil
+	}
+	sort.SliceStable(entries, func(i, j int) bool {
+		if entries[i].Kind != entries[j].Kind {
+			return entries[i].Kind < entries[j].Kind
+		}
+		return entries[i].Name < entries[j].Name
+	})
+	return lock.New(entries).Save(path)
+}
+
+// loadCatalog resolves and merges every source for the current project and
+// returns the catalog, the project root, and the shared home.
+func loadCatalog() (catalog.Catalog, string, string, error) {
 	home, err := config.SharedHome()
 	if err != nil {
-		return catalog.Catalog{}, "", err
+		return catalog.Catalog{}, "", "", err
 	}
 	projectRoot, err := config.ProjectRoot()
 	if err != nil {
-		return catalog.Catalog{}, "", err
+		return catalog.Catalog{}, "", "", err
 	}
-	// Sources in precedence order, highest first: the project shadows the
-	// shared library. Remote sources will append after these.
-	cat, err := catalog.Load(
-		source.NewLocalDirectory("local", config.AgentsDir(projectRoot), artifact.SourceLocal),
-		source.NewLocalDirectory("home", home, artifact.SourceShared),
-	)
+	sources, err := projectSources(home, projectRoot)
 	if err != nil {
-		return catalog.Catalog{}, "", err
+		return catalog.Catalog{}, "", "", err
 	}
-	return cat, projectRoot, nil
+	cat, err := catalog.Load(sources...)
+	if err != nil {
+		return catalog.Catalog{}, "", "", err
+	}
+	return cat, projectRoot, home, nil
+}
+
+// projectSources builds the ordered sources for a project, highest precedence
+// first: the project's own .agents, then the shared library, then each
+// configured remote source. Remote sources resolve their existing working copy
+// only — no network access happens here; cloning is done by `source add` and
+// refreshing by `update`.
+func projectSources(home, projectRoot string) ([]source.Source, error) {
+	sources := []source.Source{
+		source.NewLocalDirectory(source.LocalName, config.AgentsDir(projectRoot), artifact.SourceLocal),
+		source.NewLocalDirectory(source.HomeName, home, artifact.SourceShared),
+	}
+	configured, err := config.LoadSources(config.SourcesConfigPath(home))
+	if err != nil {
+		return nil, err
+	}
+	for _, s := range configured.Sources {
+		if s.Type == "git" {
+			sources = append(sources, source.NewGitRepository(
+				s.Name, s.URL, s.Ref, config.SourceCloneDir(home, s.Name), artifact.SourceShared,
+			))
+		}
+	}
+	return sources, nil
 }
 
 func preselectedSet(ids []artifact.Identity) map[artifact.Identity]bool {

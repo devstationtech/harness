@@ -35,6 +35,7 @@ Decisions, blockers, lessons, and deferred ideas that survive across sessions.
 
 ## Deferred ideas
 
+- **D9 — verify against an existing lock**: vendoring on save always re-copies and rewrites the lock (re-selecting legitimately changes content). Verifying vendored content against a committed `harness.lock` and erroring on hash mismatch (SRC-04 ac#4) belongs to a future `harness verify` / frozen-apply command, not the normal save. Pairs naturally with T12 (upgrade).
 - Strategic question still open: for multi-agent *distribution* (M2), build emitters in-house vs. delegate to Ruler. Decide at M2.
 - Source precedence could later support explicit pinning/priority (apt-style) beyond the default order.
 

@@ -1,7 +1,7 @@
 # Multi-Source Artifact Management Tasks
 
 **Design**: `.agents/specs/features/multi-source-artifacts/design.md`
-**Status**: T1–T6 ✅ (Source port, git + local adapters, config, lockfile); next: T7 vendor → T8 wire save → T9 source commands
+**Status**: T1–T9 ✅ — end-to-end works (`source add` a git repo → its artifacts appear in selection → save vendors + locks them). Remaining: T10 index/`update`, T11 `search`, T12 `upgrade`.
 
 > Tooling note (TLC "ASK about MCPs/Skills"): this is a self-contained Go CLI — tasks need **no MCPs**. The relevant skill during execution is `tlc-spec-driven` itself (verify-per-task, atomic commits). Diagram/exploration skills (`mermaid-studio`, `codenavi`) are not installed; inline mermaid is used.
 
@@ -177,22 +177,22 @@ T9 ─────┤
 
 ---
 
-### T7: Vendor a remote artifact into the project
+### T7: Vendor a remote artifact into the project ✅
 
-**What**: Copy a `Payload` directory into `.agents/<container>/<name>/`, return a `lock.Entry`.
+**What**: Copy a remote artifact's directory into `.agents/<container>/<name>/`, return a `lock.Entry`.
 **Where**: `internal/vendor/vendor.go`
 **Depends on**: T4, T5, T6
-**Reuses**: on-demand dir creation from `workspace/writer.go`
+**Reuses**: `lock.ContentHash`; `config.AgentsDir`
 **Requirement**: SRC-03, SRC-04
 
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
 
-- [ ] Directory tree copied (not symlinked); container dir created on demand.
-- [ ] Returns `Entry` with source, commit, content hash, forward-slash path.
-- [ ] Re-vendoring identical content is idempotent; differing content surfaces a hash change.
-- [ ] `go test ./internal/vendor/...` covers copy + idempotency.
+- [x] Directory tree copied recursively (not symlinked), preserving perms; container dir created on demand.
+- [x] Returns the now-local artifact plus an `Entry` with source, commit, content hash, forward-slash path.
+- [x] Re-vendoring the same revision is idempotent (stable hash); `artifact.Origin` distinguishes remote from local.
+- [x] `go test ./internal/vendor/...` covers copy of nested files + idempotency.
 
 **Verify**: `go test ./internal/vendor/...`
 
@@ -200,30 +200,31 @@ T9 ─────┤
 
 ---
 
-### T8: Wire save flow to vendor remote selections and write the lock
+### T8: Wire save flow to vendor remote selections and write the lock ✅
 
 **What**: On TUI confirm, vendor remote-source selections, write `harness.lock`, then existing `AGENTS.md` + `harness.yaml`.
-**Where**: `internal/app/app.go` (`Run`); `internal/workspace` as needed
+**Where**: `internal/app/app.go` (`Run`, `materialize`, `writeLock`); `loadCatalog`/`projectSources` include git sources
 **Depends on**: T7
-**Reuses**: `workspace.Apply`, `tui.Run` result
+**Reuses**: `workspace.Apply`, `tui.Run` result, `vendor.Vendor`, `lock`
 **Requirement**: SRC-03, SRC-04
 
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
 
-- [ ] Selecting a remote artifact and saving copies it under `.agents/` and writes a lock entry.
-- [ ] Local/home selections behave exactly as today (no vendoring).
-- [ ] Re-apply from an existing lock verifies hashes and errors on mismatch (SRC-04 ac#4).
-- [ ] End-to-end manual test from a `file://` fixture passes.
+- [x] Selecting a remote artifact and saving copies it under `.agents/` and writes a sorted `harness.lock`; the lock is removed when nothing remote is selected.
+- [x] Local/home selections pass through untouched (referenced in place).
+- [x] `loadCatalog` resolves configured git sources (existing clones, no network) so remote artifacts appear in selection.
+- [x] End-to-end smoke from a `file://` fixture passes (`source add` → `list` shows remote artifacts).
+- [ ] **Deferred**: verifying vendored content against an existing lock and erroring on mismatch (SRC-04 ac#4) belongs to a `verify`/frozen-apply flow, not the normal save (where re-selecting legitimately changes content). Tracked as deferred idea D9.
 
-**Verify**: `go build . && ./harness` against a local fixture source; inspect `.agents/` and `harness.lock`.
+**Verify**: end-to-end `file://` smoke; `go test ./internal/app/...`
 
 **Commit**: `feat(app): vendor and lock remote selections on save`
 
 ---
 
-### T9: `harness source add | list | remove`
+### T9: `harness source add | list | remove` ✅
 
 **What**: CLI subcommands managing `sources.yaml` and clones.
 **Where**: `main.go` dispatch; `internal/app/source.go` (new)
@@ -235,10 +236,10 @@ T9 ─────┤
 
 **Done when**:
 
-- [ ] `add` records the source and clones it (temp+rename); rejects duplicate names.
-- [ ] `list` prints name/type/url/ref.
-- [ ] `remove` deletes config entry, clone, and indexed manifests; leaves vendored artifacts and locks untouched.
-- [ ] `go test` covers add/list/remove against a `file://` fixture.
+- [x] `add <url> [--name] [--ref]` validates the name, clones (temp+rename via the adapter), rejects duplicates; URL is first arg (git-style).
+- [x] `list` prints name/type/url/ref.
+- [x] `remove` deletes the config entry and clone; leaves vendored artifacts and locks untouched. (Index removal lands with T10.)
+- [x] `go test ./internal/app/... -run Source` covers add/list/remove + duplicate rejection against a `file://` fixture.
 
 **Verify**: `go test ./internal/app/... -run Source`
 
