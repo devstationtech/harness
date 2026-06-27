@@ -41,6 +41,8 @@ func run(args []string) error {
 		return app.Search(os.Stdout, args[1:])
 	case "upgrade":
 		return app.Upgrade(os.Stdout)
+	case "apply":
+		return app.Apply(os.Stdout)
 	case "version", "--version", "-v":
 		fmt.Fprintf(os.Stdout, "harness %s\n", version)
 		return nil
@@ -63,7 +65,8 @@ Usage:
   harness source …   Manage artifact sources (add | list | remove)
   harness update     Refresh all sources and rebuild the search index
   harness search Q    Search artifacts across all sources (offline)
-  harness upgrade    Re-resolve this project's locked artifacts to latest
+  harness upgrade    Re-resolve this project's selections to the latest
+  harness apply      Reconcile this project from its committed harness.yaml
   harness version    Print the version
   harness help       Show this help
 
