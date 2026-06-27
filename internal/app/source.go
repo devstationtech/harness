@@ -10,6 +10,7 @@ import (
 
 	"github.com/devstationtech/harness/internal/artifact"
 	"github.com/devstationtech/harness/internal/config"
+	"github.com/devstationtech/harness/internal/index"
 	"github.com/devstationtech/harness/internal/source"
 )
 
@@ -145,6 +146,9 @@ func sourceRemove(out io.Writer, args []string) error {
 		return err
 	}
 	if err := os.RemoveAll(config.SourceCloneDir(home, name)); err != nil {
+		return err
+	}
+	if err := index.Remove(config.IndexDir(home), name); err != nil {
 		return err
 	}
 	fmt.Fprintf(out, "Removed source %q. Artifacts already vendored into projects are left untouched.\n", name)

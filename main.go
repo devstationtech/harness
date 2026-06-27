@@ -35,6 +35,10 @@ func run(args []string) error {
 		return app.List(os.Stdout)
 	case "source":
 		return app.Source(os.Stdout, args[1:])
+	case "update":
+		return app.Update(os.Stdout)
+	case "search":
+		return app.Search(os.Stdout, args[1:])
 	case "version", "--version", "-v":
 		fmt.Fprintf(os.Stdout, "harness %s\n", version)
 		return nil
@@ -55,6 +59,8 @@ Usage:
   harness init       Create and seed the shared library (~/.harness)
   harness list       List the merged catalog as plain text
   harness source …   Manage artifact sources (add | list | remove)
+  harness update     Refresh all sources and rebuild the search index
+  harness search Q    Search artifacts across all sources (offline)
   harness version    Print the version
   harness help       Show this help
 
