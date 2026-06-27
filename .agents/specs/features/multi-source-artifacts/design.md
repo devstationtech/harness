@@ -57,20 +57,20 @@ Resolution is a two-step contract per the apt/krew pattern: **Resolve** returns 
 
 - **Purpose**: One contract for "a place artifacts come from".
 - **Location**: `internal/source/source.go`
-- **Interfaces** (Go):
-  - `type Source interface { Name() string; Resolve() ([]Manifest, []catalog.Issue, error); Fetch(id artifact.Identity) (Payload, error) }`
-  - `type Manifest struct { Kind artifact.Kind; Name, Description, Source string; Ref string; Locator string; Metadata map[string]string }`
-  - `type Payload struct { Directory string }` — absolute path to a directory laid out as `<ENTRY>.md` (+ optional subdirs), ready to copy.
-- **Dependencies**: `artifact`, `catalog.Issue`.
+- **Interfaces** (Go), as implemented (decision D8):
+  - `type Source interface { Name() string; Resolve() ([]artifact.Artifact, []Issue, error) }`
+  - `type Issue struct { Path, Reason string }` — a directory that looked like an artifact but failed to load. Lives in `source` (not `catalog`) to keep dependencies pointing inward (`catalog` imports `source`, never the reverse).
+- **Deferred to the index phase (T10)**: a lightweight, serializable `Manifest` projection and any lazy `Payload`/`Fetch`. Not needed yet — resolution returns fully-formed `artifact.Artifact` (which already carries `Directory`), and vendoring copies that directory directly.
+- **Dependencies**: `artifact`.
 - **Reuses**: `frontmatter` for parsing; `artifact` conventions.
 
 ### LocalDirectory adapter
 
 - **Purpose**: Resolve artifacts from a base directory (home library or project `.agents/`).
 - **Location**: `internal/source/local.go`
-- **Interfaces**: `func NewLocalDirectory(name, base string) Source`.
+- **Interfaces**: `func NewLocalDirectory(name, base string, tag artifact.Source) LocalDirectory`.
 - **Dependencies**: filesystem, `artifact`, `frontmatter`.
-- **Reuses**: the existing `scanBase`/`readArtifact` logic moved here verbatim; `Fetch` returns the on-disk directory.
+- **Reuses**: the catalog's former `scanBase`/`readArtifact` scan logic, moved here. Resolution returns artifacts tagged with the source; an empty or missing base resolves to nothing.
 
 ### GitRepository adapter
 

@@ -6,6 +6,7 @@ import (
 
 	"github.com/devstationtech/harness/internal/artifact"
 	"github.com/devstationtech/harness/internal/catalog"
+	"github.com/devstationtech/harness/internal/source"
 )
 
 func TestInitSeedsValidArtifacts(t *testing.T) {
@@ -22,7 +23,7 @@ func TestInitSeedsValidArtifacts(t *testing.T) {
 	if len(result.Created) == 0 {
 		t.Fatal("expected seeded files to be created")
 	}
-	cat, err := catalog.Load(home, "")
+	cat, err := catalog.Load(source.NewLocalDirectory("home", home, artifact.SourceShared))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,7 +70,7 @@ func TestSeedNamesMatchDirectories(t *testing.T) {
 	}
 
 	// @When loading the catalog
-	cat, err := catalog.Load(home, "")
+	cat, err := catalog.Load(source.NewLocalDirectory("home", home, artifact.SourceShared))
 	if err != nil {
 		t.Fatal(err)
 	}

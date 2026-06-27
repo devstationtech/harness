@@ -11,6 +11,7 @@ import (
 	"github.com/devstationtech/harness/internal/catalog"
 	"github.com/devstationtech/harness/internal/config"
 	"github.com/devstationtech/harness/internal/library"
+	"github.com/devstationtech/harness/internal/source"
 	"github.com/devstationtech/harness/internal/tui"
 	"github.com/devstationtech/harness/internal/workspace"
 )
@@ -48,6 +49,7 @@ func List(out io.Writer) error {
 	artifacts := cat.All()
 	if len(artifacts) == 0 {
 		fmt.Fprintln(out, "No artifacts found. Run `harness init`, or add artifacts under .agents/.")
+		printIssues(out, cat.Issues())
 		return nil
 	}
 	var currentKind artifact.Kind
@@ -64,11 +66,23 @@ func List(out io.Writer) error {
 		}
 		fmt.Fprintf(out, "  [ ] %s | %s | %s\n", a.Name, source, a.Description)
 	}
+	printIssues(out, cat.Issues())
 	return nil
 }
 
+// printIssues reports artifacts that were skipped during loading, with reasons.
+func printIssues(out io.Writer, issues []source.Issue) {
+	if len(issues) == 0 {
+		return
+	}
+	fmt.Fprintf(out, "\n⚠ %d artifact(s) skipped (fix and re-run):\n", len(issues))
+	for _, issue := range issues {
+		fmt.Fprintf(out, "  %s\n    %s\n", issue.Path, issue.Reason)
+	}
+}
+
 // Run launches the interactive selection TUI and persists the chosen artifacts.
-func Run(out io.Writer) error {
+func Run(out io.Writer, version string) error {
 	cat, projectRoot, err := loadCatalog()
 	if err != nil {
 		return err
@@ -80,12 +94,13 @@ func Run(out io.Writer) error {
 	}
 	preselected := preselectedSet(manifest.Identities())
 
-	result, err := tui.Run(cat.All(), preselected)
+	result, err := tui.Run(cat.All(), preselected, version, len(cat.Issues()))
 	if err != nil {
 		return err
 	}
 	if !result.Confirmed {
 		fmt.Fprintln(out, "No changes saved.")
+		printIssues(out, cat.Issues())
 		return nil
 	}
 
@@ -93,6 +108,7 @@ func Run(out io.Writer) error {
 		return err
 	}
 	printSaveSummary(out, projectRoot, result.Selected)
+	printIssues(out, cat.Issues())
 	return nil
 }
 
@@ -105,7 +121,12 @@ func loadCatalog() (catalog.Catalog, string, error) {
 	if err != nil {
 		return catalog.Catalog{}, "", err
 	}
-	cat, err := catalog.Load(home, config.AgentsDir(projectRoot))
+	// Sources in precedence order, highest first: the project shadows the
+	// shared library. Remote sources will append after these.
+	cat, err := catalog.Load(
+		source.NewLocalDirectory("local", config.AgentsDir(projectRoot), artifact.SourceLocal),
+		source.NewLocalDirectory("home", home, artifact.SourceShared),
+	)
 	if err != nil {
 		return catalog.Catalog{}, "", err
 	}
@@ -132,7 +153,8 @@ func printSaveSummary(out io.Writer, projectRoot string, selected []artifact.Art
 	for _, kind := range artifact.Kinds() {
 		fmt.Fprintf(out, "  %-7s %d\n", kind.Container()+":", counts[kind])
 	}
-	fmt.Fprintf(out, "Wrote %s and %s\n",
+	fmt.Fprintf(
+		out, "Wrote %s and %s\n",
 		config.AgentsFilePath(projectRoot),
 		config.ManifestPath(projectRoot),
 	)

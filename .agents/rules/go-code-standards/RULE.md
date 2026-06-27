@@ -86,7 +86,7 @@ func NewGitRepository(name, url, ref string) (*GitRepository, error) {
 - Add context by wrapping: `fmt.Errorf("clone %s: %w", url, err)`. Use `errors.Is` / `errors.As` to inspect.
 - Error strings are lowercase, no trailing punctuation, no newline.
 - Define a typed/sentinel error only when a caller must branch on it (e.g. a "git not found" condition the CLI reports specially).
-- Never ignore an error silently. If an error is genuinely ignorable, assign to `_` with a comment saying why.
+- Never ignore an error silently. If an error is genuinely ignorable, assign to `_` with a comment saying why. The one blanket exception is writing to an `io.Writer` such as `os.Stdout` in CLI output (`fmt.Fprint*`), where a failure is not actionable — this is excluded centrally in `.golangci.yml`, not with scattered `_ =`.
 
 ## 6. Context, naming, concurrency
 

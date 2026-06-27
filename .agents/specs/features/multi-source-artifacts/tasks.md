@@ -1,9 +1,11 @@
 # Multi-Source Artifact Management Tasks
 
 **Design**: `.agents/specs/features/multi-source-artifacts/design.md`
-**Status**: Draft
+**Status**: Phase 1 done (T1–T3 ✅); Phase 2 next
 
 > Tooling note (TLC "ASK about MCPs/Skills"): this is a self-contained Go CLI — tasks need **no MCPs**. The relevant skill during execution is `tlc-spec-driven` itself (verify-per-task, atomic commits). Diagram/exploration skills (`mermaid-studio`, `codenavi`) are not installed; inline mermaid is used.
+
+> Implementation note (decision D8): the `Source` port returns resolved `artifact.Artifact` and has no `Fetch`; `Issue` lives in the `source` package. `Manifest` (serializable projection) and any lazy `Payload` fetch are deferred to the index phase (T10), where they are actually needed. Vendoring (T7) copies `Artifact.Directory` directly.
 
 ---
 
@@ -41,21 +43,21 @@ T9 ─────┤
 
 ## Task Breakdown
 
-### T1: Define the `Source` port and `Manifest`/`Payload` types
+### T1: Define the `Source` port ✅
 
-**What**: Create the source contract and value types (no adapters yet).
+**What**: Create the source contract and the `Issue` value type (no adapters yet).
 **Where**: `internal/source/source.go`
 **Depends on**: None
-**Reuses**: `internal/artifact` types; `catalog.Issue`
+**Reuses**: `internal/artifact` types
 **Requirement**: SRC-02
 
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
 
-- [ ] `Source` interface (`Name`, `Resolve`, `Fetch`), `Manifest`, `Payload` defined and documented.
-- [ ] Package compiles with no adapter yet.
-- [ ] `go build ./...` and `go vet ./...` clean.
+- [x] `Source` interface (`Name`, `Resolve`) and `Issue` defined and documented. (`Manifest`/`Payload`/`Fetch` deferred per D8.)
+- [x] Package compiles with no adapter yet.
+- [x] `go build ./...` and `go vet ./...` clean.
 
 **Verify**: `go build ./internal/source/`
 
@@ -63,21 +65,21 @@ T9 ─────┤
 
 ---
 
-### T2: Extract `LocalDirectory` adapter from the current catalog scan
+### T2: Extract `LocalDirectory` adapter from the current catalog scan ✅
 
-**What**: Move the existing `scanBase`/`readArtifact` logic into a `LocalDirectory` source; `Fetch` returns the on-disk directory.
+**What**: Move the existing `scanBase`/`readArtifact` logic into a `LocalDirectory` source.
 **Where**: `internal/source/local.go` (new); `internal/catalog/catalog.go` (remove moved code)
 **Depends on**: T1
-**Reuses**: existing `scanBase`, `readArtifact`, `frontmatter`
+**Reuses**: existing scan logic, `frontmatter`
 **Requirement**: SRC-02
 
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
 
-- [ ] `NewLocalDirectory(name, base)` resolves the same artifacts the old `scanBase` did.
-- [ ] Invalid-artifact `Issue`s are produced identically.
-- [ ] `go test ./internal/source/...` covers resolve + one invalid case.
+- [x] `NewLocalDirectory(name, base, tag)` resolves the same artifacts the old `scanBase` did.
+- [x] Invalid-artifact `Issue`s are produced identically.
+- [x] `go test ./internal/source/...` covers resolve, name-mismatch issue, ignored dir, empty/missing base.
 
 **Verify**: `go test ./internal/source/... ./internal/catalog/...`
 
@@ -85,23 +87,23 @@ T9 ─────┤
 
 ---
 
-### T3: Refactor `catalog.Load` to merge ordered sources with precedence
+### T3: Refactor `catalog.Load` to merge ordered sources with precedence ✅
 
-**What**: Change `Load(home, agentsDir)` to `Load(sources ...source.Source)`; precedence = source order; keep `All/Find/Issues`.
+**What**: Change `Load(home, agentsDir)` to `Load(sources ...source.Source)`; precedence = source order (highest first); keep `All/ByKind/Find/Issues`.
 **Where**: `internal/catalog/catalog.go`; callers in `internal/app/app.go`
 **Depends on**: T2
-**Reuses**: existing `merge`, `Identity`
+**Reuses**: `Identity`, sort order
 **Requirement**: SRC-02
 
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
 
-- [ ] `app.loadCatalog` builds `[project(.agents), home(~/.harness)]` and passes them in.
-- [ ] All existing catalog tests pass after adaptation (override/order/merge).
-- [ ] `Identity` carries `Source`; precedence flags the shadowed artifact.
+- [x] `app.loadCatalog` builds `[project(.agents), home(~/.harness)]` (highest first) and passes them in.
+- [x] Catalog tests cover merge / precedence override / order / issue passthrough (black-box, fake source).
+- [x] Higher-precedence source wins and flags the shadowed artifact (`OverridesShared`, name to generalize when remote sources land).
 
-**Verify**: `go test ./...` (existing suite green)
+**Verify**: `make check` green (build + vet + lint + tests)
 
 **Commit**: `refactor(catalog): merge an ordered list of sources by precedence`
 

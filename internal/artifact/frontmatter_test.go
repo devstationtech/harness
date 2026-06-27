@@ -8,7 +8,6 @@ func TestParseDocument(t *testing.T) {
 
 	// @When the document is parsed
 	front, body, err := ParseDocument(content)
-
 	// @Then the frontmatter fields and the body are returned
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

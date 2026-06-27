@@ -1,41 +1,48 @@
-package catalog
+package catalog_test
 
 import (
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/devstationtech/harness/internal/artifact"
+	"github.com/devstationtech/harness/internal/catalog"
+	"github.com/devstationtech/harness/internal/source"
 )
 
-// writeArtifact lays down a minimal valid artifact under base for the given kind.
-func writeArtifact(t *testing.T, base string, kind artifact.Kind, name, description string) {
-	t.Helper()
-	dir := filepath.Join(base, kind.Container(), name)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	content := "---\nname: " + name + "\ndescription: " + description + "\n---\nbody\n"
-	if err := os.WriteFile(filepath.Join(dir, kind.EntryFile()), []byte(content), 0o644); err != nil {
-		t.Fatal(err)
-	}
+// fakeSource is a hand-written test double over the source.Source port, used to
+// exercise the catalog's merge and precedence logic in isolation from disk.
+type fakeSource struct {
+	name      string
+	artifacts []artifact.Artifact
+	issues    []source.Issue
 }
 
-func TestLoadMergesSharedAndLocal(t *testing.T) {
-	// @Given a shared library and a project with distinct artifacts
-	shared := t.TempDir()
-	local := t.TempDir()
-	writeArtifact(t, shared, artifact.KindSkill, "cqrs", "shared cqrs")
-	writeArtifact(t, shared, artifact.KindRule, "hexagonal", "shared rule")
-	writeArtifact(t, local, artifact.KindSkill, "legacy-import", "local only")
+func (f fakeSource) Name() string { return f.name }
 
-	// @When the catalog is loaded
-	cat, err := Load(shared, local)
+func (f fakeSource) Resolve() ([]artifact.Artifact, []source.Issue, error) {
+	return f.artifacts, f.issues, nil
+}
+
+func art(kind artifact.Kind, name, description string, tag artifact.Source) artifact.Artifact {
+	return artifact.Artifact{Kind: kind, Name: name, Description: description, Source: tag}
+}
+
+func TestLoadMergesAllSources(t *testing.T) {
+	// @Given two sources with distinct artifacts
+	home := fakeSource{name: "home", artifacts: []artifact.Artifact{
+		art(artifact.KindSkill, "cqrs", "shared cqrs", artifact.SourceShared),
+		art(artifact.KindRule, "hexagonal", "shared rule", artifact.SourceShared),
+	}}
+	project := fakeSource{name: "local", artifacts: []artifact.Artifact{
+		art(artifact.KindSkill, "legacy-import", "local only", artifact.SourceLocal),
+	}}
+
+	// @When the catalog loads them (project precedence first)
+	cat, err := catalog.Load(project, home)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// @Then every artifact from both bases is present
+	// @Then every artifact from both sources is present
 	if got := len(cat.All()); got != 3 {
 		t.Fatalf("merged count = %d, want 3", got)
 	}
@@ -44,20 +51,22 @@ func TestLoadMergesSharedAndLocal(t *testing.T) {
 	}
 }
 
-func TestLoadLocalOverridesShared(t *testing.T) {
-	// @Given the same skill name in both the shared library and the project
-	shared := t.TempDir()
-	local := t.TempDir()
-	writeArtifact(t, shared, artifact.KindSkill, "cqrs", "shared description")
-	writeArtifact(t, local, artifact.KindSkill, "cqrs", "local description")
+func TestLoadHigherPrecedenceWins(t *testing.T) {
+	// @Given the same identity in a higher- and a lower-precedence source
+	home := fakeSource{name: "home", artifacts: []artifact.Artifact{
+		art(artifact.KindSkill, "cqrs", "shared description", artifact.SourceShared),
+	}}
+	project := fakeSource{name: "local", artifacts: []artifact.Artifact{
+		art(artifact.KindSkill, "cqrs", "local description", artifact.SourceLocal),
+	}}
 
-	// @When the catalog is loaded
-	cat, err := Load(shared, local)
+	// @When the catalog loads with the project first
+	cat, err := catalog.Load(project, home)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// @Then the local artifact wins and is flagged as an override
+	// @Then the higher-precedence artifact wins and is flagged as an override
 	resolved, ok := cat.Find(artifact.Identity{Kind: artifact.KindSkill, Name: "cqrs"})
 	if !ok {
 		t.Fatal("cqrs not found")
@@ -75,21 +84,22 @@ func TestLoadLocalOverridesShared(t *testing.T) {
 
 func TestLoadIsOrderedByKindThenName(t *testing.T) {
 	// @Given artifacts of several kinds out of order
-	shared := t.TempDir()
-	writeArtifact(t, shared, artifact.KindSkill, "zeta", "s")
-	writeArtifact(t, shared, artifact.KindSkill, "alpha", "s")
-	writeArtifact(t, shared, artifact.KindRule, "rule-one", "r")
-	writeArtifact(t, shared, artifact.KindAgent, "agent-one", "a")
+	src := fakeSource{name: "home", artifacts: []artifact.Artifact{
+		art(artifact.KindSkill, "zeta", "s", artifact.SourceShared),
+		art(artifact.KindSkill, "alpha", "s", artifact.SourceShared),
+		art(artifact.KindRule, "rule-one", "r", artifact.SourceShared),
+		art(artifact.KindAgent, "agent-one", "a", artifact.SourceShared),
+	}}
 
-	// @When the catalog is loaded
-	cat, err := Load(shared, "")
+	// @When the catalog loads
+	cat, err := catalog.Load(src)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// @Then results are grouped rules, skills, agents and sorted by name within
-	all := cat.All()
 	want := []string{"rule-one", "alpha", "zeta", "agent-one"}
+	all := cat.All()
 	if len(all) != len(want) {
 		t.Fatalf("count = %d, want %d", len(all), len(want))
 	}
@@ -100,12 +110,29 @@ func TestLoadIsOrderedByKindThenName(t *testing.T) {
 	}
 }
 
-func TestLoadSkipsMissingBases(t *testing.T) {
-	// @Given a non-existent shared base and an empty local base
-	// @When the catalog is loaded
-	cat, err := Load(filepath.Join(t.TempDir(), "does-not-exist"), "")
+func TestLoadCollectsIssuesFromAllSources(t *testing.T) {
+	// @Given a source that reports an issue
+	src := fakeSource{name: "home", issues: []source.Issue{
+		{Path: "skills/local/SKILL.md", Reason: "name mismatch"},
+	}}
 
-	// @Then loading succeeds with an empty catalog
+	// @When the catalog loads
+	cat, err := catalog.Load(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// @Then the issue is surfaced
+	if len(cat.Issues()) != 1 {
+		t.Fatalf("got %d issues, want 1", len(cat.Issues()))
+	}
+}
+
+func TestLoadWithNoSources(t *testing.T) {
+	// @Given no sources
+	// @When the catalog loads
+	cat, err := catalog.Load()
+	// @Then it succeeds and is empty
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

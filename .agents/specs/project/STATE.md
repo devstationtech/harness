@@ -13,6 +13,7 @@ Decisions, blockers, lessons, and deferred ideas that survive across sessions.
 | D5 | The git adapter **shells out to the system `git` binary** (no pure-Go git, no custom auth). | Inherits ssh-agent, ssh config, credential helpers, OS keychain / Git Credential Manager for free; private repos "just work" if `git clone` works. | 2026-06-27 |
 | D6 | Cross-platform is a hard requirement (macOS, Linux, Windows). | Target audience uses all three. | 2026-06-27 |
 | D7 | The existing shared+local merge is the N=2 case of the `Source` port — refactor, don't add a parallel system. | Single resolution path; less code. | 2026-06-27 |
+| D8 | The `Source` port returns resolved `artifact.Artifact` (not `Manifest`) and has no `Fetch` method; `Issue` lives in the `source` package. | Behavior-preserving refactor: the app already speaks `Artifact`, and git resolves over its on-disk clone so `Artifact.Directory` suffices for vendoring. `Manifest` (a serializable projection) is introduced with the index (T10); `Issue` in `source` avoids a `source`↔`catalog` import cycle. Honors the rule: small interface, no premature abstraction. | 2026-06-27 |
 
 ## Cross-platform rules (binding for the git adapter + hashing)
 

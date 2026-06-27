@@ -12,8 +12,10 @@ import (
 	"github.com/devstationtech/harness/internal/assets"
 )
 
-const dirPermission = 0o755
-const filePermission = 0o644
+const (
+	dirPermission  = 0o755
+	filePermission = 0o644
+)
 
 // InitResult reports what Init did, so callers can give precise feedback.
 type InitResult struct {
