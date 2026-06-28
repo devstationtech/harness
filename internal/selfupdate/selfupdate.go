@@ -109,7 +109,7 @@ func (u *Updater) Update(ctx context.Context, w io.Writer) (string, error) {
 		return "", err
 	}
 	fmt.Fprintln(w, "Installing …")
-	if err := replaceExecutable(binary); err != nil {
+	if err := replaceExecutable(w, binary); err != nil {
 		return "", err
 	}
 	return latest, nil
