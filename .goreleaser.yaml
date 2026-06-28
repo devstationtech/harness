@@ -1,0 +1,67 @@
+# GoReleaser configuration — https://goreleaser.com
+# Cuts cross-platform binaries, archives and checksums for a tagged release.
+# Driven by .github/workflows/release.yml when a `v*` tag is pushed.
+version: 2
+
+project_name: harness
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: harness
+    main: .
+    binary: harness
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - id: harness
+    # harness_linux_amd64.tar.gz, harness_darwin_arm64.tar.gz, harness_windows_amd64.zip …
+    # install.sh / install.ps1 depend on exactly this naming — keep them in sync.
+    name_template: "harness_{{ .Os }}_{{ .Arch }}"
+    formats: [ "tar.gz" ]
+    format_overrides:
+      - goos: windows
+        formats: [ "zip" ]
+    files:
+      - README.md
+      - LICENSE
+
+checksum:
+  name_template: "checksums.txt"
+  algorithm: sha256
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - "^ci:"
+      - "Merge pull request"
+
+release:
+  github:
+    owner: devstationtech
+    name: harness
+  draft: false
+  prerelease: auto
+  name_template: "harness {{ .Tag }}"

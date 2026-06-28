@@ -1,12 +1,4 @@
-# --- Personal / non-OSS material that happens to live in this working tree ---
-# These predate the CLI project and must never be published.
-/references/
-/tools/
-/.obsidian/
-/conceitos-agentes-rules-skills-specs.md
-/discovery-harness-llm-arquitetura-homogenea.md
-
-# --- Go ---
+# --- Go build output ---
 /harness
 /dist/
 *.test
@@ -17,3 +9,26 @@ coverage*
 .DS_Store
 .idea/
 .vscode/
+
+# --- Per-agent install dirs (artifacts are organized under .agents/) ---
+/.claude/
+/.cursor/
+/.windsurf/
+
+# --- harness dogfooding state (machine-specific) ---
+# harness generates these from YOUR selection and personal shared library
+# (~/.harness), so they are not portable across contributors. Run `harness`
+# to regenerate them locally. See CONTRIBUTING.md.
+/harness.yaml
+/AGENTS.md
+
+# --- Project-local agent artifacts ---
+# Vendored or localized copies of shared / third-party artifacts must NOT be
+# committed here — only artifacts native to harness's own development are kept
+# (the dev rule below and the specs under .agents/specs/). Everything else that
+# lands under the kind containers is ignored. See CONTRIBUTING.md.
+/.agents/skills/
+/.agents/agents/
+/.agents/mcps/
+/.agents/rules/*
+!/.agents/rules/go-code-standards/

@@ -1,20 +1,49 @@
 # harness
 
 Configure AI-agent harness artifacts — **rules**, **skills** and **agents** —
-across your projects from a single shared library.
+across your projects from a single shared library, and generate the `AGENTS.md`
+that tells agents *what to always load* and *what to load only when needed*.
 
 `harness` merges a personal library in your home (`~/.harness`) with the
 project-local artifacts in `.agents/`, lets you pick what each project needs in a
-small TUI, and generates an `AGENTS.md` that tells agents *what to always load*
-and *what to load only when needed*.
+small TUI, composes technology-agnostic skills with stack-specific
+implementations, and writes a portable `AGENTS.md` + a `harness.yaml` manifest.
 
-> Status: early pilot. Single-user / local sharing between your own projects.
-> A future release will add remote artifact repositories and centralized
-> install.
+> **Status:** early pilot (`v0.x`). Single-user / local sharing between your own
+> projects, with optional git artifact sources. APIs and the CLI may still change.
 
-## Concepts
+## Install
 
-Three artifact kinds, one on-disk convention (adapted from
+| Platform | Command |
+| --- | --- |
+| Linux / macOS | `curl -fsSL https://raw.githubusercontent.com/devstationtech/harness/main/install.sh \| sh` |
+| Windows (PowerShell) | `irm https://raw.githubusercontent.com/devstationtech/harness/main/install.ps1 \| iex` |
+| Go toolchain | `go install github.com/devstationtech/harness@latest` |
+| From source | `git clone … && cd harness && make install` |
+
+The `curl`/`irm` installers download a prebuilt release binary (override the
+target with `HARNESS_INSTALL_DIR`, pin a version with `HARNESS_VERSION=v0.1.0`).
+See [docs/RELEASING.md](docs/RELEASING.md) for details — including installing
+while the repository is still private.
+
+## Quick start
+
+```sh
+harness init     # create & seed your shared library (~/.harness)
+cd my-project
+harness          # pick artifacts for this project (interactive)
+```
+
+Saving writes two files at the project root:
+
+- **`AGENTS.md`** — the agent entry point: a loading protocol plus one table per
+  kind (and a "composed designs" section). Commit it.
+- **`harness.yaml`** — the manifest of active artifacts (source of truth). Commit
+  it; `harness apply` reconstructs the project from it on a fresh clone.
+
+## How it works
+
+Three artifact kinds share one on-disk convention (adapted from
 [Agent Skills](https://agentskills.io)):
 
 | Kind  | Container | Entry file | Role in `AGENTS.md` |
@@ -23,83 +52,57 @@ Three artifact kinds, one on-disk convention (adapted from
 | skill | `skills/` | `SKILL.md` | Capability — **load on NEED** |
 | agent | `agents/` | `AGENT.md` | Executor — **delegate on NEED** |
 
+Artifacts resolve across three locations by **precedence** — project `.agents/`
+(`local`) overrides `~/.harness/` (`shared`) overrides configured git sources.
+Shared artifacts are **referenced in place**, not copied, so an empty `.agents/`
+never clutters a project; **localize** one (TUI `v`, or `harness vendor`) to copy
+it in and make the project self-contained.
+
+**Composition** lets an abstract skill (declaring `contracts`) be fulfilled by
+stack-specific capabilities (`implements` / `provides` / `stack`) through
+explicit per-contract bindings made in the compose wizard.
+
+Full model — precedence, manifest schema, composition, localization, sources —
+is in **[docs/concepts.md](docs/concepts.md)**.
+
+## Commands
+
 ```
-<container>/<name>/
-├── <ENTRY>.md        # frontmatter (name, description, …) + instructions
-├── scripts/          # optional
-├── references/       # optional
-└── assets/           # optional
-```
-
-Artifacts live in two places with the **same structure**:
-
-- `~/.harness/` — your shared library, reused across projects (`shared`).
-- `<project>/.agents/` — local to one repository (`local`). A local artifact
-  with the same name overrides the shared one.
-
-## Install
-
-```sh
-go install github.com/devstationtech/harness@latest
-```
-
-Or build from source:
-
-```sh
-go build -o harness .
-```
-
-## Usage
-
-```sh
-harness init     # create & seed your shared library (~/.harness)
-harness          # pick artifacts for the current project (interactive)
-harness list     # print the merged catalog as text
-harness help     # show all commands
+harness            Select artifacts for the current project (interactive)
+harness init       Create and seed the shared library (~/.harness)
+harness list       List the merged catalog as plain text
+harness source …   Manage artifact sources (add | list | remove)
+harness update     Refresh all sources and rebuild the search index
+harness search Q   Search artifacts across all sources (offline)
+harness upgrade    Re-resolve this project's selections to the latest
+harness apply      Reconcile this project from its committed harness.yaml
+harness vendor K/N Copy a shared/remote artifact into .agents (local override)
+harness version    Print the version
 ```
 
-Running `harness` inside a project shows the merged catalog grouped by kind:
+Selection-TUI keys and the full per-command reference are in
+**[docs/cli.md](docs/cli.md)**.
 
 ```
 Rules · load ALWAYS  (1/1)
-  › [x] hexagonal-architecture  shared   Example invariant — the domain layer …
+  › [x] go-code-standards  local   Go coding standard for this repository …
 
 Skills · load on NEED  (1/2)
-    [x] skill-creator           shared   Create a new harness artifact …
-    [ ] spec-kit                shared   Run spec-driven development …
+    [x] spec-kit           shared  Run spec-driven development inside a project …
+    [ ] skill-creator      shared  Author a new harness artifact …
 ```
 
-Saving generates, at the project root and under `.agents/`:
+## Configuration
 
-- `AGENTS.md` — the agent entry point, with one table per kind and the loading
-  protocol.
-- `.agents/harness.yaml` — the manifest of active artifacts (source of truth).
-- `.agents/{rules,skills,agents,specs}/` — ready for project-local artifacts.
+- `HARNESS_HOME` — override the shared-library location (default `~/.harness`).
 
-Shared artifacts are **referenced in place**, not copied.
+## Development
 
-### Keys
-
-| Key | Action |
-| --- | ------ |
-| `↑`/`↓` (`k`/`j`) | move |
-| `space` (`x`) | toggle |
-| `a` | toggle whole section |
-| `enter` | save |
-| `q` / `esc` | quit without saving |
-
-## Seeded artifacts
-
-`harness init` seeds your library with:
-
-- `skill-creator` — how to author harness artifacts in the adopted convention.
-- `spec-kit` — spec-driven development; specs live in `.agents/specs/`.
-- `hexagonal-architecture` (example rule) and `code-reviewer` (example agent).
-
-Configuration:
-
-- `HARNESS_HOME` overrides the shared library location (default `~/.harness`).
+Common tasks are wrapped in the `Makefile` (run `make` to list them); `make
+check` is the full gate (gofmt · vet · lint · test) and mirrors CI. See
+**[CONTRIBUTING.md](CONTRIBUTING.md)** to get set up, and
+**[docs/RELEASING.md](docs/RELEASING.md)** to cut a release.
 
 ## License
 
-TBD.
+[MIT](LICENSE) © DevStation.

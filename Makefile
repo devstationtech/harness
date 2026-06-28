@@ -38,8 +38,15 @@ run: ## Run the selection TUI from source
 	$(GO) run .
 
 .PHONY: install
-install: ## Build and install globally (to $(INSTALL_DIR), sudo if needed)
-	INSTALL_DIR=$(INSTALL_DIR) ./install.sh
+install: build ## Build from source and install to $(INSTALL_DIR) (sudo if needed)
+	@if [ -d "$(INSTALL_DIR)" ] && [ -w "$(INSTALL_DIR)" ]; then \
+		install -m 0755 $(DIST)/$(BINARY) $(INSTALL_DIR)/$(BINARY); \
+	else \
+		echo "Elevated permissions required to write to $(INSTALL_DIR) (using sudo)."; \
+		sudo install -d -m 0755 $(INSTALL_DIR); \
+		sudo install -m 0755 $(DIST)/$(BINARY) $(INSTALL_DIR)/$(BINARY); \
+	fi
+	@echo "installed $(INSTALL_DIR)/$(BINARY) ($(VERSION))"
 
 .PHONY: uninstall
 uninstall: ## Remove the installed binary
