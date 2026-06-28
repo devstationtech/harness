@@ -74,7 +74,7 @@ func newStyles() styles {
 		cursor:      on().Foreground(accent).Bold(true),
 		name:        on().Foreground(textCol),
 		nameActive:  on().Foreground(bright).Bold(true),
-		checkOn:     on().Foreground(success).Bold(true),
+		checkOn:     on().Foreground(bright).Bold(true),
 		checkOff:    on().Foreground(faint),
 		description: on().Foreground(muted),
 		badgeShared: on().Foreground(sharedC),
