@@ -1,8 +1,9 @@
 # harness
 
-Configure AI-agent harness artifacts — **rules**, **skills** and **agents** —
-across your projects from a single shared library, and generate the `AGENTS.md`
-that tells agents *what to always load* and *what to load only when needed*.
+**harness is a command-line tool (CLI)** for configuring AI-agent artifacts —
+**rules**, **skills** and **agents** — across your projects from a single shared
+library, generating the `AGENTS.md` that tells agents *what to always load* and
+*what to load only when needed*.
 
 `harness` merges a personal library in your home (`~/.harness`) with the
 project-local artifacts in `.agents/`, lets you pick what each project needs in a
@@ -25,6 +26,11 @@ The `curl`/`irm` installers download a prebuilt release binary (override the
 target with `HARNESS_INSTALL_DIR`, pin a version with `HARNESS_VERSION=v0.1.0`).
 See [docs/RELEASING.md](docs/RELEASING.md) for details — including installing
 while the repository is still private.
+
+**Updating.** harness checks GitHub for newer releases: the selection screen
+shows an *update available* hint in its bottom-left footer — press `u` to update
+and relaunch in place — or run `harness self-update` anytime. Set
+`HARNESS_NO_UPDATE_CHECK=1` to silence the check.
 
 ## Quick start
 
@@ -77,6 +83,7 @@ harness search Q   Search artifacts across all sources (offline)
 harness upgrade    Re-resolve this project's selections to the latest
 harness apply      Reconcile this project from its committed harness.yaml
 harness vendor K/N Copy a shared/remote artifact into .agents (local override)
+harness self-update Update harness to the latest GitHub release
 harness version    Print the version
 ```
 

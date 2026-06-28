@@ -3,14 +3,19 @@
 package app
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"io"
+	"os"
 	"sort"
+	"time"
 
 	"github.com/devstationtech/harness/internal/artifact"
 	"github.com/devstationtech/harness/internal/catalog"
 	"github.com/devstationtech/harness/internal/config"
 	"github.com/devstationtech/harness/internal/library"
+	"github.com/devstationtech/harness/internal/selfupdate"
 	"github.com/devstationtech/harness/internal/source"
 	"github.com/devstationtech/harness/internal/tui"
 	"github.com/devstationtech/harness/internal/vendor"
@@ -104,9 +109,12 @@ func Run(out io.Writer, version string) error {
 	preselected := preselectedSet(manifest.Identities())
 	priorBindings := manifestBindings(manifest)
 
-	result, err := tui.Run(cat.All(), preselected, priorBindings, version, len(cat.Issues()))
+	result, err := tui.Run(cat.All(), preselected, priorBindings, version, len(cat.Issues()), updateChecker(version))
 	if err != nil {
 		return err
+	}
+	if result.RequestUpdate {
+		return performSelfUpdate(out, version)
 	}
 	if !result.Confirmed {
 		fmt.Fprintln(out, "No changes saved.")
@@ -128,6 +136,49 @@ func Run(out io.Writer, version string) error {
 	printSaveSummary(out, projectRoot, resolved)
 	printIssues(out, cat.Issues())
 	return nil
+}
+
+// updateChecker returns a non-blocking probe for a newer release, used by the
+// selection TUI's footer. It is disabled when HARNESS_NO_UPDATE_CHECK is set
+// (CI, offline, scripted use) and fails silently otherwise.
+func updateChecker(version string) func() (string, bool) {
+	if os.Getenv("HARNESS_NO_UPDATE_CHECK") != "" {
+		return nil
+	}
+	return func() (string, bool) {
+		ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+		defer cancel()
+		return selfupdate.New(version).Available(ctx)
+	}
+}
+
+// SelfUpdate downloads and installs the latest release over the running binary.
+func SelfUpdate(out io.Writer, version string) error {
+	newVersion, err := selfupdate.New(version).Update(context.Background(), out)
+	if errors.Is(err, selfupdate.ErrUpToDate) {
+		fmt.Fprintf(out, "harness %s is already the latest version.\n", version)
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(out, "Updated to %s. Re-run harness to use the new version.\n", newVersion)
+	return nil
+}
+
+// performSelfUpdate applies an update requested from the selection TUI, then
+// relaunches so the user lands in the new version (close and reopen updated).
+func performSelfUpdate(out io.Writer, version string) error {
+	newVersion, err := selfupdate.New(version).Update(context.Background(), out)
+	if errors.Is(err, selfupdate.ErrUpToDate) {
+		fmt.Fprintln(out, "Already on the latest version.")
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(out, "Updated to %s — relaunching …\n", newVersion)
+	return selfupdate.Relaunch()
 }
 
 // materialize vendors every selection that comes from a remote source into the

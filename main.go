@@ -8,6 +8,7 @@ import (
 	"os"
 
 	"github.com/devstationtech/harness/internal/app"
+	"github.com/devstationtech/harness/internal/selfupdate"
 )
 
 // version is overridden at build time via -ldflags "-X main.version=...".
@@ -21,6 +22,10 @@ func main() {
 }
 
 func run(args []string) error {
+	// Remove any binary left aside by a previous Windows self-update (no-op
+	// elsewhere).
+	selfupdate.CleanupPrevious()
+
 	command := ""
 	if len(args) > 0 {
 		command = args[0]
@@ -45,6 +50,8 @@ func run(args []string) error {
 		return app.Apply(os.Stdout)
 	case "vendor":
 		return app.Vendor(os.Stdout, args[1:])
+	case "self-update":
+		return app.SelfUpdate(os.Stdout, version)
 	case "version", "--version", "-v":
 		fmt.Fprintf(os.Stdout, "harness %s\n", version)
 		return nil
@@ -70,6 +77,7 @@ Usage:
   harness upgrade    Re-resolve this project's selections to the latest
   harness apply      Reconcile this project from its committed harness.yaml
   harness vendor K/N Copy a shared/remote artifact into .agents (local override)
+  harness self-update Update harness to the latest GitHub release
   harness version    Print the version
   harness help       Show this help
 

@@ -1,73 +1,81 @@
 # Releasing harness
 
-Releases are fully automated. Pushing a SemVer tag (`vX.Y.Z`) triggers the
+Releases are created **in the GitHub UI**. Publishing a release triggers the
 [`Release`](../.github/workflows/release.yml) workflow, which runs
 [GoReleaser](https://goreleaser.com) to build every binary, archive them,
-generate checksums, and publish a GitHub Release.
+generate checksums, and upload them to that release. GoReleaser runs in
+`keep-existing` mode, so it never touches the release notes you wrote — it only
+attaches the build artifacts.
 
 ## 1. Pre-flight
 
 - Make sure `main` is green — the [`CI`](../.github/workflows/ci.yml) workflow
   must pass (`make check` locally mirrors it exactly).
 - Pick the next version following [Semantic Versioning](https://semver.org):
-  - `v0.Y.Z` while the API/CLI is still unstable (current phase).
+  - `v0.Y.Z` while the CLI is still unstable (current phase).
   - patch (`Z`) for fixes, minor (`Y`) for features, major (`X`) for breaking
     changes.
-- (Optional) dry-run the release locally to catch config errors before tagging:
+- (Optional) dry-run the build locally to catch config errors first:
 
   ```sh
   goreleaser release --snapshot --clean   # builds into ./dist, publishes nothing
   ```
 
-## 2. Tag and push
+## 2. Create the release on GitHub
 
-```sh
-git switch main && git pull
-git tag -a v0.1.0 -m "harness v0.1.0"
-git push origin v0.1.0
-```
+1. Go to **Releases → Draft a new release**.
+2. **Choose a tag**: type the new version (e.g. `v0.1.0`) and "Create new tag on
+   publish" — target `main`.
+3. Write the title and release notes.
+4. Click **Publish release** (mark it a pre-release for `-rc`/`-beta` tags).
 
-Pushing the tag **is** the publish step. The workflow then:
+Publishing fires the workflow. Within a couple of minutes it:
 
-1. checks out the repo at the tag,
+1. checks out the repo at the release tag,
 2. builds `harness` for `linux`, `darwin`, `windows` × `amd64`, `arm64`,
 3. packages each as `harness_<os>_<arch>.tar.gz` (`.zip` on Windows),
 4. writes `checksums.txt` (SHA-256),
-5. creates the GitHub Release **harness v0.1.0** with a changelog and all assets.
+5. uploads them all to the release you just published.
 
-A pre-release tag (e.g. `v0.1.0-rc.1`) is published as a GitHub **pre-release**
-automatically (`prerelease: auto` in `.goreleaser.yaml`).
+> Triggering from the UI keeps you in control of *when* a release goes out and
+> what its notes say; the pipeline only produces the binaries.
 
 ## 3. Verify
 
-- Open the Release on GitHub and confirm the archives + `checksums.txt` are
-  attached.
+- Open the release and confirm the archives + `checksums.txt` are attached
+  (watch progress under the repo's **Actions** tab).
 - Smoke-test the installer (once the repo is public):
 
   ```sh
   curl -fsSL https://raw.githubusercontent.com/devstationtech/harness/main/install.sh | sh
-  harness version    # should print the tag you released
+  harness version       # prints the tag you released
   ```
 
-## How users install a release
+- Existing installs will see an **update available** prompt in the selection TUI,
+  or can run `harness self-update`.
 
-| Platform | Command |
+## How users install / update
+
+| Action | Command |
 | --- | --- |
-| Linux / macOS | `curl -fsSL https://raw.githubusercontent.com/devstationtech/harness/main/install.sh \| sh` |
-| Windows (PowerShell) | `irm https://raw.githubusercontent.com/devstationtech/harness/main/install.ps1 \| iex` |
-| Go toolchain | `go install github.com/devstationtech/harness@latest` |
+| Install (Linux/macOS) | `curl -fsSL https://raw.githubusercontent.com/devstationtech/harness/main/install.sh \| sh` |
+| Install (Windows PS) | `irm https://raw.githubusercontent.com/devstationtech/harness/main/install.ps1 \| iex` |
+| Install (Go) | `go install github.com/devstationtech/harness@latest` |
+| Update | press `u` in the TUI when prompted, or `harness self-update` |
 
-Pin a version with `HARNESS_VERSION=v0.1.0` (or `$env:HARNESS_VERSION` on
-Windows), or `…/harness@v0.1.0` for `go install`.
+Pin a version with `HARNESS_VERSION=v0.1.0` (or `$env:HARNESS_VERSION`), or
+`…/harness@v0.1.0` for `go install`.
 
-> **While the repository is private**, the public `install.sh` / `install.ps1`
-> download URLs are not reachable anonymously. Either install with a token —
-> `GITHUB_TOKEN=… curl -fsSL …/install.sh | sh` (the script falls back to the
-> authenticated GitHub API) — or use `gh release download v0.1.0 -R
-> devstationtech/harness`. Once the repo is public, no token is needed.
+> **While the repository is private**, the public download URLs (used by the
+> installers and by self-update) are not reachable anonymously. Install with a
+> token — `GITHUB_TOKEN=… curl -fsSL …/install.sh | sh` — or `gh release
+> download <tag> -R devstationtech/harness`. Self-update starts working for
+> everyone once the repo is public. (Set `HARNESS_NO_UPDATE_CHECK=1` to silence
+> the TUI's update check entirely.)
 
-## Rolling back
+## Re-running / fixing a release
 
-Releases are immutable once assets are attached. To pull one: delete the
-GitHub Release and its tag (`git push --delete origin vX.Y.Z`), then cut a new,
-higher patch version with the fix. Never re-point an existing tag.
+- Re-run the build from the **Actions** tab (`workflow_dispatch`) or by
+  re-publishing — GoReleaser replaces the artifacts, not the notes.
+- To pull a release: delete it and its tag (`git push --delete origin vX.Y.Z`),
+  then cut a new, higher patch version. Never re-point an existing tag.

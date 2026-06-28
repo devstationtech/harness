@@ -1,11 +1,13 @@
 name: Release
 
-# Pushing a semver tag (vX.Y.Z) publishes a release: GoReleaser builds the
-# cross-platform binaries, creates the GitHub Release and uploads the archives
-# plus checksums. See docs/RELEASING.md.
+# Releases are created in the GitHub UI. Publishing one triggers this workflow:
+# GoReleaser builds the cross-platform binaries and uploads the archives plus
+# checksums to that release. `workflow_dispatch` allows a manual re-run.
+# See docs/RELEASING.md.
 on:
-  push:
-    tags: [ 'v*' ]
+  release:
+    types: [ published ]
+  workflow_dispatch:
 
 permissions:
   contents: write

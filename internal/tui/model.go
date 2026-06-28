@@ -85,7 +85,19 @@ type Model struct {
 	// contract → capability name), used to pre-fill the wizard on reopen so an
 	// explicit "no implementation" survives a round trip.
 	priorBindings map[artifact.Identity]map[string]string
+
+	// Update check: checkUpdate is an injected command (run from Init) that probes
+	// GitHub for a newer release off the UI thread. When one is found its tag is
+	// shown in the footer and `u` requests it. The model does no I/O itself — the
+	// caller supplies checkUpdate and performs the update after the program exits.
+	checkUpdate   tea.Cmd
+	updateLatest  string
+	requestUpdate bool
 }
+
+// updateAvailableMsg is delivered by the injected update-check command when a
+// release newer than the running build is available.
+type updateAvailableMsg struct{ latest string }
 
 // New builds a selection model from the merged catalog. Artifacts whose identity
 // is in preselected start checked. warnings is the number of skipped artifacts.
@@ -154,6 +166,10 @@ func (m Model) activeIndices() []int {
 // Confirmed reports whether the user chose to save (Enter) rather than quit.
 func (m Model) Confirmed() bool { return m.confirmed }
 
+// RequestUpdate reports whether the user pressed the update key while a newer
+// release was available; the caller then performs the self-update.
+func (m Model) RequestUpdate() bool { return m.requestUpdate }
+
 // Selected returns the artifacts the user checked, including capabilities chosen
 // on a composition screen. A capability is included only when the abstract skill
 // it implements is also selected — never as an orphan (e.g. after its abstract
@@ -195,7 +211,7 @@ func (m Model) Bindings() map[artifact.Identity]map[string]string {
 	return out
 }
 
-func (m Model) Init() tea.Cmd { return nil }
+func (m Model) Init() tea.Cmd { return m.checkUpdate }
 
 func (m Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := message.(type) {
@@ -203,6 +219,8 @@ func (m Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		m.ensureVisible()
+	case updateAvailableMsg:
+		m.updateLatest = msg.latest
 	case tea.KeyMsg:
 		if m.detail != nil {
 			return m.handleDetailKey(msg)
@@ -259,6 +277,12 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.toggleSection()
 	case "v", "V":
 		m.toggleLocalize()
+	case "u", "U":
+		// Only meaningful once the background check has found a newer release.
+		if m.updateLatest != "" {
+			m.requestUpdate = true
+			return m, tea.Quit
+		}
 	case "i":
 		m.openDetail()
 	case "enter":
@@ -702,6 +726,11 @@ func (m Model) renderFooter(inner int) string {
 		)
 	}
 	left := m.styles.footer.Render(help)
+	// Bottom-left: surface an available update and the key that applies it.
+	if m.updateLatest != "" {
+		note := m.styles.update.Render("⬆ " + m.updateLatest + " available · press u to update")
+		left = note + m.styles.base.Render("   ") + left
+	}
 
 	right := m.styles.scrollInfo.Render(scroll)
 	if m.warnings > 0 {

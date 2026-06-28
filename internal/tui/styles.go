@@ -59,6 +59,7 @@ type styles struct {
 	empty       lipgloss.Style
 	tabActive   lipgloss.Style
 	tabInactive lipgloss.Style
+	update      lipgloss.Style
 }
 
 func newStyles() styles {
@@ -90,5 +91,6 @@ func newStyles() styles {
 		empty:       on().Foreground(muted),
 		tabActive:   lipgloss.NewStyle().Background(tabSel).Foreground(bright).Bold(true).Padding(0, 1),
 		tabInactive: lipgloss.NewStyle().Background(chipBg).Foreground(chipFg).Padding(0, 1),
+		update:      on().Foreground(accent).Bold(true),
 	}
 }

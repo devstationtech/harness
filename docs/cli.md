@@ -13,6 +13,7 @@ harness search Q   Search artifacts across all sources (offline)
 harness upgrade    Re-resolve this project's selections to the latest
 harness apply      Reconcile this project from its committed harness.yaml
 harness vendor K/N Copy a shared/remote artifact into .agents (local override)
+harness self-update Update harness to the latest GitHub release
 harness version    Print the version
 harness help       Show this help
 ```
@@ -36,9 +37,15 @@ binds its contracts to capabilities → a confirm step saves.
 | `space` / `x` | toggle selection |
 | `a` | toggle the whole section |
 | `v` | localize (vendor) the highlighted shared/remote artifact |
+| `u` | update harness (shown only when a newer release is available) |
 | `i` | show artifact detail |
 | `enter` | continue (compose, then save) |
 | `q` / `esc` | quit without saving |
+
+When a newer release is available, the footer's bottom-left shows an *update
+available* hint; pressing `u` downloads it, replaces the binary and relaunches
+in place. The check runs once in the background and never blocks startup; set
+`HARNESS_NO_UPDATE_CHECK=1` to disable it.
 
 ## `harness init`
 
@@ -111,10 +118,24 @@ afterwards to regenerate `AGENTS.md`.
 
 Example: `harness vendor skill/spec-kit`
 
+## `harness self-update`
+
+Downloads the latest GitHub release for this OS/arch, verifies its SHA-256
+against `checksums.txt`, and replaces the running binary in place. Reports
+"already the latest version" when current. Needs write permission to the install
+directory (re-run with `sudo`, or reinstall, if harness lives in a system path).
+The same machinery powers the selection TUI's `u` shortcut, which additionally
+relaunches into the new version.
+
 ## `harness version` · `harness help`
 
-Print the version (stamped at build time) or the usage summary.
+Print the version (stamped at build time) or the usage summary. Neither touches
+the network.
 
 ## Environment
 
 - `HARNESS_HOME` — override the shared-library location (default `~/.harness`).
+- `HARNESS_NO_UPDATE_CHECK` — when set, disables the TUI's background check for a
+  newer release.
+- `HARNESS_VERSION` / `HARNESS_INSTALL_DIR` — used by the install scripts to pin
+  a release and choose the install directory.

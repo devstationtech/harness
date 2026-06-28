@@ -62,6 +62,8 @@ release:
   github:
     owner: devstationtech
     name: harness
+  # Releases are created in the GitHub UI; GoReleaser only uploads the built
+  # archives + checksums to the existing release and leaves its notes untouched.
+  mode: keep-existing
   draft: false
   prerelease: auto
-  name_template: "harness {{ .Tag }}"
