@@ -133,6 +133,33 @@ func TestRenderAgentsFileUsesRelativePathForLocal(t *testing.T) {
 	}
 }
 
+func TestRenderAgentsFileUsesTildeForSharedHomePath(t *testing.T) {
+	// @Given a shared artifact whose entry lives under the user's home directory
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Skip("no home directory")
+	}
+	sharedEntry := filepath.Join(home, ".harness", "skills", "cqrs", "SKILL.md")
+	selected := []artifact.Artifact{
+		{Kind: artifact.KindSkill, Name: "cqrs", Description: "shared", Source: artifact.SourceShared, EntryPath: sharedEntry},
+	}
+
+	// @When AGENTS.md is rendered for some project
+	out, err := RenderAgentsFile(t.TempDir(), selected, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// @Then the path is shown under ~/, never leaking the absolute home path
+	rendered := string(out)
+	if !strings.Contains(rendered, "`~/.harness/skills/cqrs/SKILL.md`") {
+		t.Errorf("expected ~-relative path in AGENTS.md:\n%s", rendered)
+	}
+	if strings.Contains(rendered, home) {
+		t.Errorf("AGENTS.md leaked the absolute home path %q:\n%s", home, rendered)
+	}
+}
+
 func TestRenderAgentsFileComposesAbstractAndCapability(t *testing.T) {
 	// @Given an abstract skill (two contracts) and a capability providing one
 	projectRoot := t.TempDir()

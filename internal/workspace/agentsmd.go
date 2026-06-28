@@ -2,6 +2,7 @@ package workspace
 
 import (
 	"bytes"
+	"os"
 	"path/filepath"
 	"strings"
 	"text/template"
@@ -123,13 +124,19 @@ func RenderAgentsFile(projectRoot string, selected []artifact.Artifact, bindings
 }
 
 // displayPath returns a project-relative path when entryPath is inside the
-// project, otherwise the absolute path (shared artifacts live in ~/.harness).
+// project. A shared artifact lives outside the project (in ~/.harness): it is
+// shown under "~/" rather than an absolute path, so the committed AGENTS.md does
+// not bake in the maintainer's home directory (and username).
 func displayPath(projectRoot, entryPath string) string {
-	relative, err := filepath.Rel(projectRoot, entryPath)
-	if err != nil || strings.HasPrefix(relative, "..") {
-		return entryPath
+	if relative, err := filepath.Rel(projectRoot, entryPath); err == nil && !strings.HasPrefix(relative, "..") {
+		return relative
 	}
-	return relative
+	if home, err := os.UserHomeDir(); err == nil {
+		if rel, err := filepath.Rel(home, entryPath); err == nil && !strings.HasPrefix(rel, "..") {
+			return "~/" + filepath.ToSlash(rel)
+		}
+	}
+	return entryPath
 }
 
 // sanitizeCell makes a description safe to render inside a Markdown table cell by
