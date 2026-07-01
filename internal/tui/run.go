@@ -10,9 +10,9 @@ import (
 type Result struct {
 	Confirmed bool
 	Selected  []artifact.Artifact
-	// Bindings is, per composed abstract skill, the capability chosen for each
-	// contract (a contract left unimplemented is omitted).
-	Bindings map[artifact.Identity]map[string]string
+	// Bindings is, per composed abstract artifact, the capabilities chosen for
+	// each contract (a contract left unimplemented is omitted).
+	Bindings map[artifact.Identity]map[string][]string
 	// Localized are artifacts the user asked to copy into the project's .agents,
 	// to be vendored (committed, overriding the shared one) on save.
 	Localized []artifact.Identity
@@ -31,7 +31,7 @@ type Result struct {
 func Run(
 	artifacts []artifact.Artifact,
 	preselected map[artifact.Identity]bool,
-	priorBindings map[artifact.Identity]map[string]string,
+	priorBindings map[artifact.Identity]map[string][]string,
 	version string,
 	warnings int,
 	checkUpdate func() (latest string, available bool),

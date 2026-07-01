@@ -13,7 +13,7 @@ const filePermission = 0o644
 // Apply persists a project's selection: it writes the manifest at the project
 // root and (re)generates AGENTS.md. digests maps a selection's identity to the
 // content digest of its vendored copy (empty for artifacts referenced in place).
-// bindings maps an abstract skill's identity to its chosen capability per
+// bindings maps an abstract artifact's identity to its chosen capabilities per
 // contract, recorded verbatim — so an explicit "no implementation" is preserved,
 // not re-derived.
 //
@@ -21,12 +21,12 @@ const filePermission = 0o644
 // artifacts are vendored (by the caller) before Apply runs. Per-kind directories
 // come into existence on demand when a project-local artifact is authored or
 // vendored, so an empty .agents/skills/ never clutters a project.
-func Apply(projectRoot string, selected []artifact.Artifact, digests map[artifact.Identity]string, bindings map[artifact.Identity]map[string]string) error {
+func Apply(projectRoot string, selected []artifact.Artifact, digests map[artifact.Identity]string, bindings map[artifact.Identity]map[string][]string) error {
 	selections := make([]Selection, 0, len(selected))
 	for _, a := range selected {
 		selection := SelectionOf(a, digests[a.Identity()])
 		if bound := bindings[a.Identity()]; len(bound) > 0 {
-			selection.Bindings = bound
+			selection.Bindings = capabilityLists(bound)
 		}
 		selections = append(selections, selection)
 	}

@@ -14,8 +14,11 @@ import (
 
 // manifestVersion is the current schema version of the project manifest. v2
 // records the source, version and content digest per selection at the project
-// root, folding in what the retired harness.lock used to hold.
-const manifestVersion = 2
+// root, folding in what the retired harness.lock used to hold. v3 lets a
+// contract bind more than one capability (bindings values are sequences); v2
+// files, which store a single capability scalar per contract, still load (see
+// CapabilityList.UnmarshalYAML).
+const manifestVersion = 3
 
 // Manifest records the artifacts a project has activated. It is the single
 // declarative record of the project's harness state, committed at the project
@@ -28,12 +31,57 @@ type Manifest struct {
 
 // Selection is one activated artifact.
 type Selection struct {
-	Kind     artifact.Kind     `yaml:"kind"`
-	Name     string            `yaml:"name"`
-	Source   string            `yaml:"source"`             // origin name: local | home | <remote>
-	Version  string            `yaml:"version,omitempty"`  // SemVer; empty = unversioned
-	Digest   string            `yaml:"digest,omitempty"`   // sha256 of vendored content; empty if referenced
-	Bindings map[string]string `yaml:"bindings,omitempty"` // abstract skill: contract -> capability name
+	Kind     artifact.Kind             `yaml:"kind"`
+	Name     string                    `yaml:"name"`
+	Source   string                    `yaml:"source"`             // origin name: local | home | <remote>
+	Version  string                    `yaml:"version,omitempty"`  // SemVer; empty = unversioned
+	Digest   string                    `yaml:"digest,omitempty"`   // sha256 of vendored content; empty if referenced
+	Bindings map[string]CapabilityList `yaml:"bindings,omitempty"` // abstract: contract -> capabilities
+}
+
+// CapabilityList is the set of capabilities bound to one contract. It marshals as
+// a YAML sequence but also accepts a bare scalar, so a v2 manifest (one
+// capability per contract) loads unchanged.
+type CapabilityList []string
+
+// UnmarshalYAML accepts either a scalar (legacy single capability) or a sequence.
+func (c *CapabilityList) UnmarshalYAML(node *yaml.Node) error {
+	if node.Kind == yaml.ScalarNode {
+		*c = CapabilityList{node.Value}
+		return nil
+	}
+	var list []string
+	if err := node.Decode(&list); err != nil {
+		return err
+	}
+	*c = list
+	return nil
+}
+
+// BindingsAsMap returns the selection's bindings as plain contract -> capability
+// slices, the form the TUI and AGENTS.md rendering consume.
+func (s Selection) BindingsAsMap() map[string][]string {
+	if len(s.Bindings) == 0 {
+		return nil
+	}
+	out := make(map[string][]string, len(s.Bindings))
+	for contract, caps := range s.Bindings {
+		out[contract] = []string(caps)
+	}
+	return out
+}
+
+// capabilityLists converts plain contract -> capability slices into the manifest
+// binding form.
+func capabilityLists(bindings map[string][]string) map[string]CapabilityList {
+	if len(bindings) == 0 {
+		return nil
+	}
+	out := make(map[string]CapabilityList, len(bindings))
+	for contract, caps := range bindings {
+		out[contract] = caps
+	}
+	return out
 }
 
 // SelectionOf builds a selection for a resolved artifact and an optional content

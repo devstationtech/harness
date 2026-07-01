@@ -20,15 +20,21 @@ type reference struct {
 	Path        string
 }
 
-// contractLine renders one contract of a composition and the capability bound to
-// it (Capability/Path empty when the contract is unbound).
-type contractLine struct {
-	Contract   string
-	Capability string
-	Path       string
+// capabilityRef is one capability bound to a contract: its name and the path to
+// its entry document (empty when the capability is not among the selection).
+type capabilityRef struct {
+	Name string
+	Path string
 }
 
-// compositionView renders an abstract skill as its contract plus the chosen
+// contractLine renders one contract of a composition and the capabilities bound
+// to it (empty when the contract is unbound).
+type contractLine struct {
+	Contract     string
+	Capabilities []capabilityRef
+}
+
+// compositionView renders an abstract artifact as its contract plus the chosen
 // implementations.
 type compositionView struct {
 	Abstract  string
@@ -37,23 +43,64 @@ type compositionView struct {
 	Contracts []contractLine
 }
 
+// mcpView renders a composed MCP integration: its instruction document and the
+// agent targets enabled for it. MCPs read as setup/usage instructions rather than
+// "contracts", so they get their own section and a flattened target list instead
+// of the per-contract layout.
+type mcpView struct {
+	Name     string
+	Path     string
+	Complete bool
+	Targets  []capabilityRef
+}
+
 // agentsData is the template payload for AGENTS.md.
 type agentsData struct {
-	SpecsDir     string
-	Rules        []reference
-	Skills       []reference
-	Agents       []reference
-	Compositions []compositionView
+	SpecsDir        string
+	Rules           []reference
+	Skills          []reference
+	Agents          []reference
+	MCPs            []reference
+	Compositions    []compositionView
+	MCPCompositions []mcpView
 }
 
 var agentsTemplate = template.Must(
 	template.New("agents.md").Parse(assets.AgentsTemplate),
 )
 
+// mcpComposition builds the view for a composed MCP: its instruction document
+// and the flattened set of enabled target capabilities. It marks the abstract and
+// every bound capability hidden so they do not also appear in the flat tables.
+func mcpComposition(projectRoot string, a artifact.Artifact, bound map[string][]string, byIdentity map[artifact.Identity]artifact.Artifact, hidden map[artifact.Identity]bool) mcpView {
+	view := mcpView{
+		Name:     a.Name,
+		Path:     displayPath(projectRoot, a.EntryPath),
+		Complete: true,
+	}
+	for _, contract := range a.Contracts {
+		caps := bound[contract]
+		if len(caps) == 0 {
+			view.Complete = false
+		}
+		// A capability implements an abstract of the same kind by name.
+		for _, name := range caps {
+			ref := capabilityRef{Name: name}
+			capabilityID := artifact.Identity{Kind: a.Kind, Name: name}
+			if capability, ok := byIdentity[capabilityID]; ok {
+				ref.Path = displayPath(projectRoot, capability.EntryPath)
+				hidden[capabilityID] = true
+			}
+			view.Targets = append(view.Targets, ref)
+		}
+	}
+	return view
+}
+
 // RenderAgentsFile renders AGENTS.md for the given selected artifacts. Paths are
 // made relative to projectRoot when possible (local artifacts) and kept absolute
 // otherwise (shared artifacts referenced in place).
-func RenderAgentsFile(projectRoot string, selected []artifact.Artifact, bindings map[artifact.Identity]map[string]string) ([]byte, error) {
+func RenderAgentsFile(projectRoot string, selected []artifact.Artifact, bindings map[artifact.Identity]map[string][]string) ([]byte, error) {
 	byIdentity := make(map[artifact.Identity]artifact.Artifact, len(selected))
 	for _, a := range selected {
 		byIdentity[a.Identity()] = a
@@ -64,12 +111,22 @@ func RenderAgentsFile(projectRoot string, selected []artifact.Artifact, bindings
 	// user's explicit choices — a contract with no binding stays unimplemented.
 	hidden := make(map[artifact.Identity]bool)
 	var compositions []compositionView
+	var mcpCompositions []mcpView
 	for _, a := range selected {
 		if !a.IsAbstract() {
 			continue
 		}
 		hidden[a.Identity()] = true
 		bound := bindings[a.Identity()]
+
+		// MCPs are setup/usage instructions, not loaded context — they render in
+		// their own section as a flattened target list, not the per-contract
+		// layout used for skill compositions.
+		if a.Kind == artifact.KindMCP {
+			mcpCompositions = append(mcpCompositions, mcpComposition(projectRoot, a, bound, byIdentity, hidden))
+			continue
+		}
+
 		view := compositionView{
 			Abstract: a.Name,
 			Path:     displayPath(projectRoot, a.EntryPath),
@@ -77,14 +134,17 @@ func RenderAgentsFile(projectRoot string, selected []artifact.Artifact, bindings
 		}
 		for _, contract := range a.Contracts {
 			line := contractLine{Contract: contract}
-			if name := bound[contract]; name != "" {
-				capabilityID := artifact.Identity{Kind: artifact.KindSkill, Name: name}
-				line.Capability = name
+			// A capability implements an abstract of the same kind by name.
+			for _, name := range bound[contract] {
+				ref := capabilityRef{Name: name}
+				capabilityID := artifact.Identity{Kind: a.Kind, Name: name}
 				if capability, ok := byIdentity[capabilityID]; ok {
-					line.Path = displayPath(projectRoot, capability.EntryPath)
+					ref.Path = displayPath(projectRoot, capability.EntryPath)
 					hidden[capabilityID] = true
 				}
-			} else {
+				line.Capabilities = append(line.Capabilities, ref)
+			}
+			if len(line.Capabilities) == 0 {
 				view.Complete = false
 			}
 			view.Contracts = append(view.Contracts, line)
@@ -93,8 +153,9 @@ func RenderAgentsFile(projectRoot string, selected []artifact.Artifact, bindings
 	}
 
 	data := agentsData{
-		SpecsDir:     config.AgentsDirName + "/" + config.SpecsDirName,
-		Compositions: compositions,
+		SpecsDir:        config.AgentsDirName + "/" + config.SpecsDirName,
+		Compositions:    compositions,
+		MCPCompositions: mcpCompositions,
 	}
 	for _, a := range selected {
 		if hidden[a.Identity()] {
@@ -113,6 +174,8 @@ func RenderAgentsFile(projectRoot string, selected []artifact.Artifact, bindings
 			data.Skills = append(data.Skills, ref)
 		case artifact.KindAgent:
 			data.Agents = append(data.Agents, ref)
+		case artifact.KindMCP:
+			data.MCPs = append(data.MCPs, ref)
 		}
 	}
 

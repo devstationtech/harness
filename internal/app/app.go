@@ -214,15 +214,17 @@ func materialize(selected []artifact.Artifact, projectRoot, home string, localiz
 }
 
 // expandLocalized turns the user's localize requests into the full set to
-// vendor: localizing an abstract skill also localizes the capabilities its
+// vendor: localizing an abstract artifact also localizes the capabilities its
 // bindings point to, so the composition is complete for anyone who clones the
-// project.
-func expandLocalized(requested []artifact.Identity, bindings map[artifact.Identity]map[string]string) map[artifact.Identity]bool {
+// project. A capability shares the abstract's kind.
+func expandLocalized(requested []artifact.Identity, bindings map[artifact.Identity]map[string][]string) map[artifact.Identity]bool {
 	set := make(map[artifact.Identity]bool, len(requested))
 	for _, id := range requested {
 		set[id] = true
-		for _, capability := range bindings[id] {
-			set[artifact.Identity{Kind: artifact.KindSkill, Name: capability}] = true
+		for _, capabilities := range bindings[id] {
+			for _, capability := range capabilities {
+				set[artifact.Identity{Kind: id.Kind, Name: capability}] = true
+			}
 		}
 	}
 	return set
@@ -283,12 +285,12 @@ func preselectedSet(ids []artifact.Identity) map[artifact.Identity]bool {
 }
 
 // manifestBindings extracts the recorded contract→capability bindings per
-// abstract skill from a manifest, keyed by identity.
-func manifestBindings(manifest workspace.Manifest) map[artifact.Identity]map[string]string {
-	out := make(map[artifact.Identity]map[string]string)
+// abstract artifact from a manifest, keyed by identity.
+func manifestBindings(manifest workspace.Manifest) map[artifact.Identity]map[string][]string {
+	out := make(map[artifact.Identity]map[string][]string)
 	for _, selection := range manifest.Selections {
-		if len(selection.Bindings) > 0 {
-			out[artifact.Identity{Kind: selection.Kind, Name: selection.Name}] = selection.Bindings
+		if bound := selection.BindingsAsMap(); len(bound) > 0 {
+			out[artifact.Identity{Kind: selection.Kind, Name: selection.Name}] = bound
 		}
 	}
 	return out

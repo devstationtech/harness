@@ -18,6 +18,9 @@ Read this section first, then load artifacts according to these rules:
   disclosure) so you do not waste context on capabilities you will not use.
 - **Agents — delegate on NEED.** Agents are specialized executors. Delegate to
   one when its description fits the task.
+- **MCPs — set up on NEED.** MCP entries wire an external tool server into the
+  coding agents that support it. When the user asks to enable one, read its
+  document and run the setup script it points to for the chosen tool(s).
 - **Specs** live in `{{.SpecsDir}}/`, one directory per spec. Consult the
   relevant spec before implementing the feature it describes.
 
@@ -40,8 +43,8 @@ _No skills selected yet._
 {{range .Compositions}}
 ### `{{.Abstract}}`{{if not .Complete}} — ⚠ incomplete composition{{end}}
 
-Load the agnostic contract (`{{.Path}}`) first, then the chosen implementation per concern:
-{{range .Contracts}}- **{{.Contract}}** → {{if .Capability}}`{{.Capability}}` — `{{.Path}}`{{else}}⚠ no implementation selected{{end}}
+Load the contract (`{{.Path}}`) first, then the chosen implementation(s) per concern:
+{{range .Contracts}}- **{{.Contract}}** → {{if .Capabilities}}{{range $i, $c := .Capabilities}}{{if $i}}, {{end}}`{{$c.Name}}` — `{{$c.Path}}`{{end}}{{else}}⚠ no implementation selected{{end}}
 {{end}}{{end}}
 {{end}}## Agents — delegate on NEED
 {{if .Agents}}
@@ -50,4 +53,16 @@ Load the agnostic contract (`{{.Path}}`) first, then the chosen implementation p
 {{range .Agents}}| `{{.Name}}` | {{.Description}} | {{.Source}} | `{{.Path}}` |
 {{end}}{{else}}
 _No agents selected yet._
-{{end}}
+{{end}}{{if or .MCPCompositions .MCPs}}
+## MCP servers — set up on NEED
+
+These are setup and usage instructions for external tool servers (Model Context Protocol), not context to load up front. Act on one only when the user asks to enable, configure or use it — then open its document and run the setup it describes for the requested tool(s).
+{{range .MCPCompositions}}
+### `{{.Name}}`{{if not .Complete}} — ⚠ no target enabled{{end}}
+
+Instructions: `{{.Path}}`{{if .Targets}} — enabled for {{range $i, $t := .Targets}}{{if $i}}, {{end}}`{{$t.Name}}` (`{{$t.Path}}`){{end}}{{end}}
+{{end}}{{if .MCPs}}
+| MCP | What it wires in | Source | Path |
+| --- | --- | --- | --- |
+{{range .MCPs}}| `{{.Name}}` | {{.Description}} | {{.Source}} | `{{.Path}}` |
+{{end}}{{end}}{{end}}

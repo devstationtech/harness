@@ -42,6 +42,56 @@ func TestManifestRoundTrip(t *testing.T) {
 	}
 }
 
+func TestLoadManifestReadsLegacyScalarBindings(t *testing.T) {
+	// @Given a v2 manifest whose bindings are bare scalars (one capability each)
+	const legacy = `version: 2
+selections:
+    - kind: skill
+      name: low-level-design
+      source: home
+      bindings:
+        domain: lld-go
+        command: lld-go
+`
+	path := filepath.Join(t.TempDir(), "harness.yaml")
+	if err := os.WriteFile(path, []byte(legacy), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// @When it is loaded
+	manifest, err := LoadManifest(path)
+	if err != nil {
+		t.Fatalf("legacy manifest should load: %v", err)
+	}
+
+	// @Then each scalar binding becomes a single-element capability list
+	bound := manifest.Selections[0].BindingsAsMap()
+	if got := bound["domain"]; len(got) != 1 || got[0] != "lld-go" {
+		t.Errorf("domain binding = %v, want [lld-go]", got)
+	}
+}
+
+func TestManifestMultiBindingRoundTrip(t *testing.T) {
+	// @Given a selection binding one contract to two capabilities (v3 form)
+	sel := SelectionOf(artifact.Artifact{Kind: artifact.KindMCP, Name: "github", Origin: "home"}, "")
+	sel.Bindings = capabilityLists(map[string][]string{"target": {"github-claude-code", "github-codex"}})
+
+	// @When the manifest is saved and reloaded
+	path := filepath.Join(t.TempDir(), "harness.yaml")
+	if err := NewManifest([]Selection{sel}).Save(path); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := LoadManifest(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// @Then both capabilities survive the round trip
+	if got := loaded.Selections[0].BindingsAsMap()["target"]; len(got) != 2 {
+		t.Errorf("target binding = %v, want two capabilities", got)
+	}
+}
+
 func TestLoadManifestMissingFileIsEmpty(t *testing.T) {
 	// @Given a path with no manifest file
 	// @When the manifest is loaded
@@ -171,8 +221,8 @@ func TestRenderAgentsFileComposesAbstractAndCapability(t *testing.T) {
 	}
 
 	// @When AGENTS.md is rendered with domain bound to lld-ts and persistence left unset
-	bindings := map[artifact.Identity]map[string]string{
-		{Kind: artifact.KindSkill, Name: "lld"}: {"domain": "lld-ts"},
+	bindings := map[artifact.Identity]map[string][]string{
+		{Kind: artifact.KindSkill, Name: "lld"}: {"domain": {"lld-ts"}},
 	}
 	out, err := RenderAgentsFile(projectRoot, selected, bindings)
 	if err != nil {
@@ -197,5 +247,53 @@ func TestRenderAgentsFileComposesAbstractAndCapability(t *testing.T) {
 	// @And the abstract and bound capability are hidden from the flat skills table
 	if strings.Contains(rendered, "| `lld` |") || strings.Contains(rendered, "| `lld-ts` |") {
 		t.Errorf("abstract/capability should not appear in the skills table:\n%s", rendered)
+	}
+}
+
+func TestRenderAgentsFileComposesMultiSelectMCP(t *testing.T) {
+	// @Given a multi-select MCP abstract whose single contract binds two capabilities
+	projectRoot := t.TempDir()
+	abstractEntry := filepath.Join(t.TempDir(), "mcps", "github", "MCP.md")
+	claudeEntry := filepath.Join(t.TempDir(), "mcps", "github-claude-code", "MCP.md")
+	codexEntry := filepath.Join(t.TempDir(), "mcps", "github-codex", "MCP.md")
+	selected := []artifact.Artifact{
+		{Kind: artifact.KindMCP, Name: "github", Description: "GitHub MCP", Source: artifact.SourceShared, EntryPath: abstractEntry, Contracts: []string{"target"}, Multiple: true},
+		{Kind: artifact.KindMCP, Name: "github-claude-code", Source: artifact.SourceShared, EntryPath: claudeEntry, Implements: "github", Provides: []string{"target"}, Stack: "claude-code"},
+		{Kind: artifact.KindMCP, Name: "github-codex", Source: artifact.SourceShared, EntryPath: codexEntry, Implements: "github", Provides: []string{"target"}, Stack: "codex"},
+	}
+
+	// @When AGENTS.md is rendered with both capabilities bound to the contract
+	bindings := map[artifact.Identity]map[string][]string{
+		{Kind: artifact.KindMCP, Name: "github"}: {"target": {"github-claude-code", "github-codex"}},
+	}
+	out, err := RenderAgentsFile(projectRoot, selected, bindings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rendered := string(out)
+
+	// @Then it renders under the dedicated MCP section, not skill compositions
+	if !strings.Contains(rendered, "## MCP servers") {
+		t.Errorf("missing MCP section:\n%s", rendered)
+	}
+	mcpIdx := strings.Index(rendered, "## MCP servers")
+	composedIdx := strings.Index(rendered, "## Composed designs")
+	if composedIdx >= 0 && strings.Index(rendered, "`github`") < composedIdx {
+		t.Errorf("github should not appear before/under Composed designs:\n%s", rendered)
+	}
+	if gh := strings.Index(rendered, "`github`"); gh < mcpIdx {
+		t.Errorf("github should render inside the MCP section:\n%s", rendered)
+	}
+
+	// @And both enabled targets are listed with their instruction docs
+	if !strings.Contains(rendered, "`github-claude-code`") || !strings.Contains(rendered, "`github-codex`") {
+		t.Errorf("both targets should be listed:\n%s", rendered)
+	}
+	if strings.Contains(rendered, "no target enabled") {
+		t.Errorf("composition should be complete:\n%s", rendered)
+	}
+	// @And the targets are hidden from the flat MCP table
+	if strings.Contains(rendered, "| `github-claude-code` |") {
+		t.Errorf("bound target should not appear in the MCP table:\n%s", rendered)
 	}
 }

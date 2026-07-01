@@ -49,7 +49,7 @@ Saving writes two files at the project root:
 
 ## How it works
 
-Three artifact kinds share one on-disk convention (adapted from
+Four artifact kinds share one on-disk convention (adapted from
 [Agent Skills](https://agentskills.io)):
 
 | Kind  | Container | Entry file | Role in `AGENTS.md` |
@@ -57,6 +57,7 @@ Three artifact kinds share one on-disk convention (adapted from
 | rule  | `rules/`  | `RULE.md`  | Invariant — **load ALWAYS** |
 | skill | `skills/` | `SKILL.md` | Capability — **load on NEED** |
 | agent | `agents/` | `AGENT.md` | Executor — **delegate on NEED** |
+| mcp   | `mcps/`   | `MCP.md`   | Tool-server integration — **set up on NEED** |
 
 Artifacts resolve across three locations by **precedence** — project `.agents/`
 (`local`) overrides `~/.harness/` (`shared`) overrides configured git sources.
@@ -64,9 +65,11 @@ Shared artifacts are **referenced in place**, not copied, so an empty `.agents/`
 never clutters a project; **localize** one (TUI `v`, or `harness vendor`) to copy
 it in and make the project self-contained.
 
-**Composition** lets an abstract skill (declaring `contracts`) be fulfilled by
-stack-specific capabilities (`implements` / `provides` / `stack`) through
-explicit per-contract bindings made in the compose wizard.
+**Composition** lets an abstract artifact (declaring `contracts`) be fulfilled by
+specific capabilities (`implements` / `provides` / `stack`) through explicit
+per-contract bindings made in the compose wizard. A contract binds one capability
+by default, or several when the abstract sets `multiple: true` (e.g. an MCP
+enabled for several agents at once).
 
 Full model — precedence, manifest schema, composition, localization, sources —
 is in **[docs/concepts.md](docs/concepts.md)**.

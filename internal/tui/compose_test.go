@@ -35,7 +35,7 @@ func chooseByName(t *testing.T, view *composeView, contract, capabilityName stri
 		}
 		for j, candidate := range view.contracts[i].candidates {
 			if candidate.Name == capabilityName {
-				view.contracts[i].chosen = j
+				view.contracts[i].setSingle(j)
 				return
 			}
 		}
@@ -124,8 +124,8 @@ func TestPriorBindingsHonorExplicitNone(t *testing.T) {
 		abstract("lld", "domain", "command"),
 		capability("lld-ts", "lld", "domain", "command"),
 	}, selectedID("lld"), "v", 0)
-	m.priorBindings = map[artifact.Identity]map[string]string{
-		{Kind: artifact.KindSkill, Name: "lld"}: {"domain": "lld-ts"},
+	m.priorBindings = map[artifact.Identity]map[string][]string{
+		{Kind: artifact.KindSkill, Name: "lld"}: {"domain": {"lld-ts"}},
 	}
 
 	// @When the wizard rebuilds the composition
@@ -134,10 +134,10 @@ func TestPriorBindingsHonorExplicitNone(t *testing.T) {
 	view := m.compositions[0]
 
 	// @Then domain is pre-chosen and command stays unbound (none), not re-bound
-	if view.contracts[0].contract != "domain" || view.contracts[0].chosen != 0 {
+	if view.contracts[0].contract != "domain" || view.contracts[0].single() != 0 {
 		t.Errorf("domain not pre-chosen: %+v", view.contracts[0])
 	}
-	if view.contracts[1].contract != "command" || view.contracts[1].chosen != -1 {
+	if view.contracts[1].contract != "command" || view.contracts[1].single() != -1 {
 		t.Errorf("command should stay unbound, got %+v", view.contracts[1])
 	}
 }
@@ -174,16 +174,58 @@ func TestCycleWrapsThroughNone(t *testing.T) {
 
 	// @When cycling forward through every option
 	// @Then it goes none → first → second → none
-	if view.contracts[0].chosen != -1 {
-		t.Fatalf("initial = %d, want -1", view.contracts[0].chosen)
+	if view.contracts[0].single() != -1 {
+		t.Fatalf("initial = %d, want -1", view.contracts[0].single())
 	}
 	cycle(view, 1)
-	if view.contracts[0].chosen != 0 {
-		t.Errorf("after one cycle = %d, want 0", view.contracts[0].chosen)
+	if view.contracts[0].single() != 0 {
+		t.Errorf("after one cycle = %d, want 0", view.contracts[0].single())
 	}
 	cycle(view, 1)
 	cycle(view, 1)
-	if view.contracts[0].chosen != -1 {
-		t.Errorf("after wrapping = %d, want -1", view.contracts[0].chosen)
+	if view.contracts[0].single() != -1 {
+		t.Errorf("after wrapping = %d, want -1", view.contracts[0].single())
+	}
+}
+
+// mcpAbstract and mcpCapability build a multi-select abstract MCP and a
+// capability the way the github MCP artifacts do.
+func mcpAbstract(name string, contracts ...string) artifact.Artifact {
+	return artifact.Artifact{Kind: artifact.KindMCP, Name: name, Contracts: contracts, Multiple: true}
+}
+
+func mcpCapability(name, implements string, provides ...string) artifact.Artifact {
+	return artifact.Artifact{Kind: artifact.KindMCP, Name: name, Implements: implements, Provides: provides}
+}
+
+func TestMultiSelectBindsSeveralCapabilities(t *testing.T) {
+	// @Given a multi-select MCP abstract with one contract and two capabilities
+	m := New([]artifact.Artifact{
+		mcpAbstract("github", "target"),
+		mcpCapability("github-claude-code", "github", "target"),
+		mcpCapability("github-codex", "github", "target"),
+	}, map[artifact.Identity]bool{{Kind: artifact.KindMCP, Name: "github"}: true}, "v", 0)
+	next, _ := m.startWizard()
+	m = next.(Model)
+	view := m.compositions[0]
+	if !view.multiple {
+		t.Fatal("composition should be multi-select")
+	}
+
+	// @When both candidates are toggled on (rows 0 and 1) and applied
+	view.cursor = 0
+	toggle(view)
+	view.cursor = 1
+	toggle(view)
+	m.applyView(view)
+
+	// @Then both capabilities are bound to the contract and both are selected
+	binding := m.Bindings()[artifact.Identity{Kind: artifact.KindMCP, Name: "github"}]
+	if got := binding["target"]; len(got) != 2 {
+		t.Fatalf("target bindings = %v, want both capabilities", got)
+	}
+	names := selectedNames(m)
+	if !names["github-claude-code"] || !names["github-codex"] {
+		t.Errorf("expected both capabilities selected, got %v", names)
 	}
 }

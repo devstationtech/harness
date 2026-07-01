@@ -19,14 +19,17 @@ type Frontmatter struct {
 	Metadata      map[string]string `yaml:"metadata,omitempty"`
 	AllowedTools  string            `yaml:"allowed-tools,omitempty"`
 
-	// Composition fields. An abstract skill declares the contracts it needs
+	// Composition fields. An abstract artifact declares the contracts it needs
 	// implemented; a capability declares which abstract it implements, the
-	// contracts it provides, and its stack. These are harness-specific and
-	// ignored by other agents (agentskills-compatible).
+	// contracts it provides, and its stack. Multiple lets an abstract bind more
+	// than one capability per contract (e.g. an MCP enabled for several agents at
+	// once). These are harness-specific and ignored by other agents
+	// (agentskills-compatible).
 	Contracts  []string `yaml:"contracts,omitempty"`
 	Implements string   `yaml:"implements,omitempty"`
 	Provides   []string `yaml:"provides,omitempty"`
 	Stack      string   `yaml:"stack,omitempty"`
+	Multiple   bool     `yaml:"multiple,omitempty"`
 }
 
 const (
@@ -90,6 +93,9 @@ func (f Frontmatter) Validate(expectedName string) error {
 	}
 	if len(f.Contracts) > 0 && f.Implements != "" {
 		return fmt.Errorf("an artifact is either an abstract (contracts) or a capability (implements), not both")
+	}
+	if f.Multiple && len(f.Contracts) == 0 {
+		return fmt.Errorf("multiple only applies to an abstract artifact (one that declares contracts)")
 	}
 	return nil
 }

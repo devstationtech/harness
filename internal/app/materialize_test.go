@@ -53,8 +53,8 @@ func TestMaterializeVendorsLocalizedSharedArtifact(t *testing.T) {
 func TestExpandLocalizedPullsBoundCapabilities(t *testing.T) {
 	// @Given a localized abstract bound to two distinct capabilities
 	abstractID := artifact.Identity{Kind: artifact.KindSkill, Name: "lld"}
-	bindings := map[artifact.Identity]map[string]string{
-		abstractID: {"domain": "lld-ts", "command": "lld-ts", "query": "lld-go"},
+	bindings := map[artifact.Identity]map[string][]string{
+		abstractID: {"domain": {"lld-ts"}, "command": {"lld-ts"}, "query": {"lld-go"}},
 	}
 
 	// @When the localize set is expanded

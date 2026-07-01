@@ -25,10 +25,14 @@ const (
 	KindRule Kind = "rule"
 	// KindAgent is a specialized executor that work can be delegated to.
 	KindAgent Kind = "agent"
+	// KindMCP is a Model Context Protocol server integration: instructions (and
+	// usually setup scripts) that wire an external tool server into the coding
+	// agents that support MCP.
+	KindMCP Kind = "mcp"
 )
 
 // Kinds returns every supported kind in canonical display order.
-func Kinds() []Kind { return []Kind{KindRule, KindSkill, KindAgent} }
+func Kinds() []Kind { return []Kind{KindRule, KindSkill, KindAgent, KindMCP} }
 
 // ParseKind returns the Kind for its string form, or false if it is unknown.
 func ParseKind(s string) (Kind, bool) {
@@ -51,6 +55,8 @@ func (kind Kind) Container() string {
 		return "rules"
 	case KindAgent:
 		return "agents"
+	case KindMCP:
+		return "mcps"
 	default:
 		return string(kind) + "s"
 	}
@@ -65,6 +71,8 @@ func (kind Kind) EntryFile() string {
 		return "RULE.md"
 	case KindAgent:
 		return "AGENT.md"
+	case KindMCP:
+		return "MCP.md"
 	default:
 		return "ARTIFACT.md"
 	}
@@ -79,6 +87,8 @@ func (kind Kind) Title() string {
 		return "Rules"
 	case KindAgent:
 		return "Agents"
+	case KindMCP:
+		return "MCPs"
 	default:
 		return string(kind)
 	}
@@ -122,19 +132,23 @@ type Artifact struct {
 	// same kind and name.
 	OverridesShared bool
 
-	// Composition. Contracts is non-empty for an abstract skill (the contracts
+	// Composition. Contracts is non-empty for an abstract artifact (the contracts
 	// it needs implemented). Implements/Provides/Stack are set for a capability
 	// (the abstract it implements, the contracts it fulfils, and its stack).
+	// Multiple marks an abstract whose contracts may bind more than one
+	// capability at once (e.g. an MCP enabled for several agents simultaneously),
+	// rather than the default single-implementation-per-contract choice.
 	Contracts  []string
 	Implements string
 	Provides   []string
 	Stack      string
+	Multiple   bool
 }
 
 // IsAbstract reports whether the artifact declares contracts to be implemented.
 func (a Artifact) IsAbstract() bool { return len(a.Contracts) > 0 }
 
-// IsCapability reports whether the artifact implements an abstract skill.
+// IsCapability reports whether the artifact implements an abstract artifact.
 func (a Artifact) IsCapability() bool { return a.Implements != "" }
 
 // Identity uniquely keys an artifact within a catalog by kind and name.

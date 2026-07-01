@@ -186,5 +186,6 @@ func (d LocalDirectory) read(kind artifact.Kind, dirName, directory string) (art
 		Implements:  front.Implements,
 		Provides:    front.Provides,
 		Stack:       front.Stack,
+		Multiple:    front.Multiple,
 	}, nil
 }

@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -18,19 +19,68 @@ const (
 	stepConfirm             // final review / save
 )
 
-// composeView is the composition screen for one abstract skill: a capability is
-// chosen for each of the abstract's contracts.
+// composeView is the composition screen for one abstract artifact: capabilities
+// are chosen for each of its contracts. When multiple is false (the default) each
+// contract binds at most one capability (a radio choice with a "no
+// implementation" option); when true each capability toggles independently, so a
+// contract may bind several at once (e.g. an MCP enabled for several agents).
 type composeView struct {
 	abstract  artifact.Artifact
+	multiple  bool
 	contracts []contractChoice
-	cursor    int
+	cursor    int // single mode: a contract index; multi mode: a candidate-row index
 }
 
-// contractChoice is one contract and the capabilities that can fulfil it.
+// contractChoice is one contract and the capabilities that can fulfil it. picked
+// runs parallel to candidates; in single mode at most one entry is true.
 type contractChoice struct {
 	contract   string
 	candidates []artifact.Artifact
-	chosen     int // index into candidates, or -1 for "no implementation"
+	picked     []bool
+}
+
+// single returns the index of the chosen candidate in single-select mode, or -1
+// when the contract is left without an implementation.
+func (c contractChoice) single() int {
+	for i, on := range c.picked {
+		if on {
+			return i
+		}
+	}
+	return -1
+}
+
+// setSingle selects exactly one candidate (idx), or none when idx is negative.
+func (c *contractChoice) setSingle(idx int) {
+	for i := range c.picked {
+		c.picked[i] = i == idx
+	}
+}
+
+// bound reports whether at least one capability is chosen for the contract.
+func (c contractChoice) bound() bool { return c.single() >= 0 }
+
+// chosenNames returns the names of every chosen capability, in candidate order.
+func (c contractChoice) chosenNames() []string {
+	var names []string
+	for i, on := range c.picked {
+		if on {
+			names = append(names, c.candidates[i].Name)
+		}
+	}
+	return names
+}
+
+// candidateRows flattens every (contract, candidate) pair, the navigation unit of
+// multi-select mode.
+func (v composeView) candidateRows() []struct{ contract, candidate int } {
+	var rows []struct{ contract, candidate int }
+	for ci := range v.contracts {
+		for cj := range v.contracts[ci].candidates {
+			rows = append(rows, struct{ contract, candidate int }{ci, cj})
+		}
+	}
+	return rows
 }
 
 // startWizard advances from the selection list. With no abstract skills
@@ -58,16 +108,15 @@ func (m Model) startWizard() (tea.Model, tea.Cmd) {
 // otherwise it falls back to whichever capability is already selected.
 func (m Model) newComposition(abstract artifact.Artifact) *composeView {
 	wanted := m.priorBindings[abstract.Identity()]
-	view := &composeView{abstract: abstract}
+	view := &composeView{abstract: abstract, multiple: abstract.Multiple}
 	for _, contract := range abstract.Contracts {
-		choice := contractChoice{contract: contract, chosen: -1}
+		choice := contractChoice{contract: contract}
 		for _, it := range m.capabilities {
 			capability := it.artifact
-			if capability.Implements == abstract.Name && contains(capability.Provides, contract) {
+			// A capability implements an abstract of the same kind by name.
+			if capability.Kind == abstract.Kind && capability.Implements == abstract.Name && contains(capability.Provides, contract) {
 				choice.candidates = append(choice.candidates, capability)
-				if picksCandidate(wanted, contract, capability.Name, it.selected) {
-					choice.chosen = len(choice.candidates) - 1
-				}
+				choice.picked = append(choice.picked, picksCandidate(wanted, contract, capability.Name, it.selected))
 			}
 		}
 		view.contracts = append(view.contracts, choice)
@@ -75,12 +124,12 @@ func (m Model) newComposition(abstract artifact.Artifact) *composeView {
 	return view
 }
 
-// picksCandidate decides whether a candidate is the chosen one for a contract.
-// With recorded bindings it matches by name (an absent contract stays unbound);
+// picksCandidate decides whether a candidate is chosen for a contract. With
+// recorded bindings it matches by name (an absent contract stays unbound);
 // without them it falls back to whether the capability is already selected.
-func picksCandidate(wanted map[string]string, contract, capability string, selected bool) bool {
+func picksCandidate(wanted map[string][]string, contract, capability string, selected bool) bool {
 	if wanted != nil {
-		return wanted[contract] == capability
+		return contains(wanted[contract], capability)
 	}
 	return selected
 }
@@ -94,13 +143,19 @@ func (m Model) handleComposeKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "ctrl+c":
 		return m, tea.Quit
 	case "up", "k":
-		view.cursor = clampIndex(view.cursor-1, len(view.contracts))
+		view.cursor = clampIndex(view.cursor-1, composeRowCount(view))
 	case "down", "j":
-		view.cursor = clampIndex(view.cursor+1, len(view.contracts))
+		view.cursor = clampIndex(view.cursor+1, composeRowCount(view))
 	case "left", "h":
-		cycle(view, -1)
-	case "right", "l", " ":
-		cycle(view, 1)
+		if !view.multiple {
+			cycle(view, -1)
+		}
+	case "right", "l":
+		if !view.multiple {
+			cycle(view, 1)
+		}
+	case " ":
+		toggle(view)
 	case "enter":
 		m.applyView(view)
 		if m.composeIndex < len(m.compositions)-1 {
@@ -119,17 +174,42 @@ func (m Model) handleComposeKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// cycle moves the focused contract's choice through its candidates and the
-// "no implementation" option, wrapping around.
+// composeRowCount is the number of navigable rows: one per contract in single
+// mode, one per candidate in multi mode.
+func composeRowCount(view *composeView) int {
+	if view.multiple {
+		return len(view.candidateRows())
+	}
+	return len(view.contracts)
+}
+
+// cycle moves the focused contract's single choice through its candidates and the
+// "no implementation" option, wrapping around. Single-select only.
 func cycle(view *composeView, delta int) {
 	if len(view.contracts) == 0 {
 		return
 	}
 	choice := &view.contracts[view.cursor]
 	options := len(choice.candidates) + 1 // +1 for "no implementation"
-	index := choice.chosen + 1
+	index := choice.single() + 1
 	index = ((index+delta)%options + options) % options
-	choice.chosen = index - 1
+	choice.setSingle(index - 1)
+}
+
+// toggle flips the focused candidate. In single mode space advances the radio
+// (like →); in multi mode it toggles just the focused candidate independently.
+func toggle(view *composeView) {
+	if !view.multiple {
+		cycle(view, 1)
+		return
+	}
+	rows := view.candidateRows()
+	if len(rows) == 0 {
+		return
+	}
+	r := rows[clampIndex(view.cursor, len(rows))]
+	choice := &view.contracts[r.contract]
+	choice.picked[r.candidate] = !choice.picked[r.candidate]
 }
 
 // applyView folds one composition's choices into the selection: every chosen
@@ -137,13 +217,16 @@ func cycle(view *composeView, delta int) {
 func (m *Model) applyView(view *composeView) {
 	chosen := make(map[artifact.Identity]bool)
 	for _, choice := range view.contracts {
-		if choice.chosen >= 0 {
-			chosen[choice.candidates[choice.chosen].Identity()] = true
+		for i, on := range choice.picked {
+			if on {
+				chosen[choice.candidates[i].Identity()] = true
+			}
 		}
 	}
 	for i := range m.capabilities {
-		if m.capabilities[i].artifact.Implements == view.abstract.Name {
-			m.capabilities[i].selected = chosen[m.capabilities[i].artifact.Identity()]
+		c := m.capabilities[i].artifact
+		if c.Kind == view.abstract.Kind && c.Implements == view.abstract.Name {
+			m.capabilities[i].selected = chosen[c.Identity()]
 		}
 	}
 }
@@ -174,26 +257,68 @@ func (m Model) renderCompose(inner int) string {
 		title += fmt.Sprintf("  (%d/%d)", m.composeIndex+1, len(m.compositions))
 	}
 	content := m.composeRows(view, inner-boxChromeCols)
+	help := "↑/↓ contract · ←/→ choose · enter next · esc back · ctrl+c quit"
+	if view.multiple {
+		help = "↑/↓ row · space toggle · enter next · esc back · ctrl+c quit"
+	}
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
 		m.renderHeader(inner),
 		m.renderTitledBox(m.styles.chip.Render(title), inner, content),
-		m.footerLine(inner, "↑/↓ contract · ←/→ choose · enter next · esc back · ctrl+c quit"),
+		m.footerLine(inner, help),
 	)
 }
 
 // composeRows builds the box content for one composition, padded to the content
-// height.
+// height. Single-select renders one row per contract; multi-select renders each
+// contract's candidates as independent checkboxes.
 func (m Model) composeRows(view *composeView, width int) []string {
+	header := "Choose an implementation for each contract"
+	if view.multiple {
+		header = "Toggle every implementation you want active"
+	}
 	rows := []string{
-		m.paint(width, m.styles.subtitle.Render("Choose an implementation for each contract")),
+		m.paint(width, m.styles.subtitle.Render(header)),
 		m.paint(width, ""),
 	}
-	for index, choice := range view.contracts {
-		rows = append(rows, m.renderContractRow(view, index, choice, width))
+	if view.multiple {
+		rows = append(rows, m.multiContractRows(view, width)...)
+	} else {
+		for index, choice := range view.contracts {
+			rows = append(rows, m.renderContractRow(view, index, choice, width))
+		}
 	}
 	rows = append(rows, m.paint(width, ""), m.paint(width, composeStatus(view, m.styles)))
 	return m.fitRows(rows, width)
+}
+
+// multiContractRows renders each contract as a header followed by a checkbox per
+// candidate; the cursor walks the flattened candidate rows.
+func (m Model) multiContractRows(view *composeView, width int) []string {
+	var rows []string
+	flat := 0
+	for ci := range view.contracts {
+		choice := view.contracts[ci]
+		rows = append(rows, m.paint(width, m.styles.section.Render(strings.ToUpper(choice.contract))))
+		for cj, candidate := range choice.candidates {
+			cursor := m.styles.base.Render("  ")
+			if flat == view.cursor {
+				cursor = m.styles.cursor.Render("› ")
+			}
+			box := m.styles.checkOff.Render("[ ]")
+			if choice.picked[cj] {
+				box = m.styles.checkOn.Render("[x]")
+			}
+			label := candidate.Name
+			if candidate.Stack != "" {
+				label += " · " + candidate.Stack
+			}
+			line := cursor + box + m.styles.base.Render(" ") + m.styles.name.Render(label)
+			rows = append(rows, m.styles.base.Width(width).MaxWidth(width).Render(line))
+			flat++
+		}
+	}
+	return rows
 }
 
 // renderContractRow draws one contract and its chosen capability, padded to width.
@@ -209,8 +334,8 @@ func (m Model) renderContractRow(view *composeView, index int, choice contractCh
 	contractCell := contractStyle.Width(contractWidth).MaxWidth(contractWidth).Render(truncate(choice.contract, contractWidth))
 
 	chosen := m.styles.checkOff.Render("[ ] no implementation")
-	if choice.chosen >= 0 {
-		capability := choice.candidates[choice.chosen]
+	if sel := choice.single(); sel >= 0 {
+		capability := choice.candidates[sel]
 		label := capability.Name
 		if capability.Stack != "" {
 			label += " · " + capability.Stack
@@ -239,7 +364,7 @@ func composeStatus(view *composeView, s styles) string {
 func unboundCount(view *composeView) int {
 	unbound := 0
 	for _, choice := range view.contracts {
-		if choice.chosen < 0 {
+		if !choice.bound() {
 			unbound++
 		}
 	}

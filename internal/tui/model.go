@@ -82,9 +82,9 @@ type Model struct {
 	compositions []*composeView
 	composeIndex int
 	// priorBindings are the manifest's recorded bindings (abstract identity →
-	// contract → capability name), used to pre-fill the wizard on reopen so an
+	// contract → capability names), used to pre-fill the wizard on reopen so an
 	// explicit "no implementation" survives a round trip.
-	priorBindings map[artifact.Identity]map[string]string
+	priorBindings map[artifact.Identity]map[string][]string
 
 	// Update check: checkUpdate is an injected command (run from Init) that probes
 	// GitHub for a newer release off the UI thread. When one is found its tag is
@@ -193,17 +193,17 @@ func (m Model) Selected() []artifact.Artifact {
 	return out
 }
 
-// Bindings returns, per composed abstract skill, the capability chosen for each
-// contract exactly as the user set it — a contract left without an
+// Bindings returns, per composed abstract artifact, the capabilities chosen for
+// each contract exactly as the user set it — a contract left without an
 // implementation is omitted. These explicit choices are the source of truth for
 // the manifest and AGENTS.md, so an unset contract is never re-bound.
-func (m Model) Bindings() map[artifact.Identity]map[string]string {
-	out := make(map[artifact.Identity]map[string]string)
+func (m Model) Bindings() map[artifact.Identity]map[string][]string {
+	out := make(map[artifact.Identity]map[string][]string)
 	for _, view := range m.compositions {
-		bound := make(map[string]string)
+		bound := make(map[string][]string)
 		for _, choice := range view.contracts {
-			if choice.chosen >= 0 {
-				bound[choice.contract] = choice.candidates[choice.chosen].Name
+			if names := choice.chosenNames(); len(names) > 0 {
+				bound[choice.contract] = names
 			}
 		}
 		out[view.abstract.Identity()] = bound

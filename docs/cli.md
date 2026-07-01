@@ -27,8 +27,14 @@ The default command. Opens the selection TUI for the current project.
 - **Writes**: vendored copies under `.agents/<container>/<name>/` (for remote and
   localized selections), `harness.yaml`, and `AGENTS.md`.
 
-**Flow**: pick artifacts → for each selected *abstract* skill, a compose step
-binds its contracts to capabilities → a confirm step saves.
+**Flow**: pick artifacts → for each selected *abstract* artifact, a compose step
+binds its contracts to capabilities (a radio choice per contract, or independent
+checkboxes when the abstract is `multiple: true`) → a confirm step saves.
+
+The kind tabs include **mcp** when MCP artifacts are present. Selecting an MCP and
+choosing its target agents writes nothing to those agents directly — it records
+the choice and links the MCP's `MCP.md` in `AGENTS.md`; you (or an agent) then run
+the setup script it documents to configure each tool.
 
 | Key | Action |
 | --- | ------ |
