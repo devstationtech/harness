@@ -1,5 +1,11 @@
 # Source Index and Versioning Specification
 
+> **Implementation status:** ✅ shipped. One drift note: the manifest data-model
+> snapshot in `design.md` predates artifact-composition — the live schema is
+> **v3** and `Selection` carries `Bindings map[string]CapabilityList`. Also,
+> `ContentHash` is `vendor.ContentHash` (`internal/vendor`); the `internal/lock`
+> package was removed entirely, not "reduced".
+
 ## Problem Statement
 
 Artifacts have no versioning today: `version` is, at best, free-form text in `metadata` that harness ignores, and the agentskills.io standard does not require it. Reproducibility rests only on a git commit/content hash recorded in a separate `harness.lock`. We want package-level SemVer that works across heterogeneous sources (git and npm) without forcing a repository topology, and a single declarative project manifest at the project root — folding the lock's provenance and integrity into it.

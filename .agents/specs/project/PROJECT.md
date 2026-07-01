@@ -2,7 +2,7 @@
 
 ## What
 
-`harness` is a global, cross-project CLI that manages AI-agent harness artifacts — **rules**, **skills**, and **agents** (and, ahead, MCP configurations) — and composes them into per-project agent instructions (`AGENTS.md` and per-agent equivalents).
+`harness` is a global, cross-project CLI that manages AI-agent harness artifacts — **rules**, **skills**, **agents**, and **MCP integrations** — and composes them into per-project agent instructions (`AGENTS.md` and per-agent equivalents).
 
 ## Why
 
@@ -18,10 +18,10 @@ The "sync one rule-set to many agents" lane is already owned by mature tools (Ru
 
 ## Principles
 
-- **Follow consolidated patterns; do not reinvent.** Artifact format = Agent Skills (agentskills.io). Distribution = git-repo sources + local index + lockfile (apt/brew/krew). Auth = delegate to the system git client.
+- **Follow consolidated patterns; do not reinvent.** Artifact format = Agent Skills (agentskills.io). Distribution = git-repo sources + local index + a root manifest recording source/version/digest (apt/brew/krew). Auth = delegate to the system git client.
 - **Stack-agnostic output, multi-target.** `AGENTS.md` is canonical, but Claude Code reads `CLAUDE.md` — emit per agent.
 - **Cross-platform (macOS, Linux, Windows).** No shell interpolation, no hardcoded paths, line-ending-stable hashing.
-- **Reproducible.** Anything resolved from a remote source is vendored and locked by content hash.
+- **Reproducible.** Anything resolved from a remote source is vendored and pinned by content-hash digest recorded in the root manifest.
 - **OSS-distributable.** Personal knowledge base lives outside this repo.
 
 ## Tech

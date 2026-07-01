@@ -1,5 +1,13 @@
 # Multi-Source Artifact Management Specification
 
+> **Implementation status:** ✅ shipped, but **partly superseded by M2**
+> (source-index-and-versioning). The separate `harness.lock` and `internal/lock`
+> package described below were **retired**: provenance + digest now live
+> per-selection in the root `harness.yaml`, and `ContentHash` moved to
+> `internal/vendor`. Read every "lock"/`internal/lock` reference here as "the root
+> manifest". The `Source` port also returns resolved `artifact.Artifact` (no
+> `Fetch`/`Payload`), per decision D8.
+
 ## Problem Statement
 
 Today `harness` discovers artifacts from exactly two fixed locations: the shared library (`~/.harness`) and the project (`.agents/`). The developer cannot point `harness` at external or private artifact repositories, so a personal library cannot be reused across machines, shared selectively, or grown from public catalogs. We need a unified manager that consumes many sources (local directories and git repositories, public or private) with offline search and reproducible resolution — following the consolidated `apt` / `Homebrew tap` / `Krew` model rather than inventing a format.

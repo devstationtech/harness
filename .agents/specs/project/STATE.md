@@ -8,7 +8,12 @@ Decisions, blockers, lessons, and deferred ideas that survive across sessions.
 |---|----------|-----------|------|
 | D1 | Artifact format follows Agent Skills / agentskills.io (`<container>/<name>/<ENTRY>.md`, frontmatter `name`==dir, `description`). | Adopt the consolidated open standard; any source's skills stay compatible. | 2026-06-27 |
 | D2 | Distribution model = git-repository sources + local index + lockfile (the `apt` / `Homebrew tap` / `Krew` pattern). | Matches the user's "add public/private repos, search, install" vision without inventing a format. | 2026-06-27 |
-| D3 | Remote artifacts are **vendored + locked by content hash** (`harness.lock`), not referenced live. | Reproducible, offline, CI-safe; consumers don't need source access at consume time. | 2026-06-27 |
+| D3 | Remote artifacts are **vendored + pinned by content-hash digest**, not referenced live. | Reproducible, offline, CI-safe; consumers don't need source access at consume time. | 2026-06-27 |
+| ~~D3a~~ | *Superseded:* the separate `harness.lock` / `internal/lock` package was retired at M2 — provenance + digest now live per-selection in the root `harness.yaml`; `ContentHash` moved to `internal/vendor`. | Single record of project state; one file to reason about. | 2026-06-28 |
+| D9 | Manifest lives at the **project root** (`harness.yaml`), carrying kind/name/source/version/digest/bindings, schema **v3**. | Folds in the retired lock; one committed source of truth. | 2026-06-28 |
+| D10 | Composition binding is an **explicit user choice** (TUI compose wizard), not derived — no `internal/compose` package, no auto-bind/shadow. An abstract may set `multiple: true` to bind several capabilities per contract. | Predictable, no behind-the-back rebinding; enables MCP-per-agent. | 2026-06-29 |
+| D11 | **`mcp` is a first-class kind** (`mcps/`, `MCP.md`); MCPs are setup/usage instructions (with deterministic scripts) rendered in a dedicated AGENTS.md section, acted on per user request. | MCP config is repetitive + agent-specific; keep it deterministic and out of loaded context. | 2026-06-29 |
+| D12 | **Localized (vendored) artifacts under `.agents/` are committed** to standardize contributions; only the generated `harness.yaml`/`AGENTS.md` stay gitignored. | Localizing exists precisely to make the project self-contained for contributors. | 2026-07-01 |
 | D4 | First remote source type = **git** (public/private). npm/OCI are later adapters of the same `Source` port. | Most reusable; aligns with "add repo" model. npm-as-foundation rejected (couples to Node). | 2026-06-27 |
 | D5 | The git adapter **shells out to the system `git` binary** (no pure-Go git, no custom auth). | Inherits ssh-agent, ssh config, credential helpers, OS keychain / Git Credential Manager for free; private repos "just work" if `git clone` works. | 2026-06-27 |
 | D6 | Cross-platform is a hard requirement (macOS, Linux, Windows). | Target audience uses all three. | 2026-06-27 |
@@ -35,7 +40,7 @@ Decisions, blockers, lessons, and deferred ideas that survive across sessions.
 
 ## Deferred ideas
 
-- **D9 — verify against an existing lock**: vendoring on save always re-copies and rewrites the lock (re-selecting legitimately changes content). Verifying vendored content against a committed `harness.lock` and erroring on hash mismatch (SRC-04 ac#4) belongs to a future `harness verify` / frozen-apply command, not the normal save. Pairs naturally with T12 (upgrade).
+- ~~**verify against an existing lock**~~ — *delivered*: `harness apply` reconciles from the committed root manifest and reports on-disk content that differs from the recorded digest (`internal/app/apply.go`). The old `harness.lock` framing is retired (see D3a/D9).
 - Strategic question still open: for multi-agent *distribution* (M2), build emitters in-house vs. delegate to Ruler. Decide at M2.
 - Source precedence could later support explicit pinning/priority (apt-style) beyond the default order.
 

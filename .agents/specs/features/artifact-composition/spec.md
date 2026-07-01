@@ -4,13 +4,35 @@
 
 A developer's low-level design is the same shape across many projects (hexagonal, CQS, domain/command/query/handler/persistence) but the concrete code differs by stack (TypeScript, Go, PHP). Today each skill is monolithic and stack-bound, so the knowledge is duplicated and cannot be reused or recombined. We want an **abstract skill** that defines language-agnostic *contracts* (concepts, layer rules, directory and naming conventions) and **capabilities** that *implement* those contracts per stack, composed per project — like an interface that extends segregated interfaces, each fulfilled by a trait, mixed and matched. Composition must reuse shared capabilities (no repetition per project), allow local overrides via the existing source precedence, and render a project's `AGENTS.md` as the contract followed by links to the chosen implementations.
 
+## Implementation status (shipped — supersedes divergent parts below)
+
+Composition shipped, and generalized beyond this document. Where the text below
+disagrees with the code, the code is authoritative:
+
+- **Any kind, not skills only.** Composition works for any artifact kind. The
+  motivating second case is `mcp` (a GitHub MCP enabled for several agents), which
+  renders in its own "MCP servers" AGENTS.md section rather than "Composed
+  designs". Read "abstract skill" throughout as "abstract **artifact**".
+- **Multi-select.** An abstract may set `multiple: true`, letting a contract bind
+  **several** capabilities at once (the MCP-per-agent case). Default stays
+  single-select. Frontmatter: `internal/artifact/frontmatter.go`.
+- **Bindings are the user's explicit choice**, made in the TUI compose wizard
+  (`internal/tui/compose.go`) and recorded in `harness.yaml`. There is **no**
+  `internal/compose` package and **no** deterministic auto-bind / "shadowed"
+  resolution (CMP-05 below was not built that way). A contract with no choice
+  stays unbound. Rendering: `internal/workspace/agentsmd.go`.
+- **Manifest is v3**: `Selection.Bindings` is `map[string]CapabilityList` (a list
+  per contract); v2 scalar bindings still load.
+- The interactive composition screen (P2) shipped. Stack-aware filtering (P3) is
+  deferred.
+
 ## Goals
 
-- [ ] An abstract skill declares the `contracts` it needs implemented; a capability declares which abstract it `implements`, the `contracts` it `provides`, and its `stack`.
-- [ ] harness composes a project's selection: it binds each abstract contract to a selected capability that provides it, and reports any unbound contract (incomplete composition).
-- [ ] Capabilities are shared and reusable; a project's `harness.yaml` records only the bindings (and any local override wins by existing precedence).
-- [ ] `AGENTS.md` renders an abstract skill as its contract plus an "Implementations" section linking the bound capabilities, with unbound contracts flagged.
-- [ ] Validate the model by extracting a real `low-level-design` abstract skill and a `lld-typescript` capability from the `../cli` architecture skills.
+- [x] An abstract artifact declares the `contracts` it needs implemented; a capability declares which abstract it `implements`, the `contracts` it `provides`, and its `stack`.
+- [x] harness composes a project's selection: the user binds each contract to one or more selected capabilities (per `multiple`), and any unbound contract is reported (incomplete composition).
+- [x] Capabilities are shared and reusable; a project's `harness.yaml` records the bindings (and any local override wins by existing precedence).
+- [x] `AGENTS.md` renders an abstract artifact as its contract plus the linked bound capabilities, with unbound contracts flagged; MCPs render in a dedicated section.
+- [x] Validate the model by extracting a real `low-level-design` abstract skill and `lld-*` capabilities from the `../cli` architecture skills.
 
 ## Out of Scope
 
@@ -37,7 +59,7 @@ A developer's low-level design is the same shape across many projects (hexagonal
 2. WHEN an artifact declares `implements: <name>` and `provides: [...]` THEN harness SHALL treat it as a capability of that abstract for those contracts, carrying its `stack` label.
 3. WHEN both an abstract skill and capabilities implementing it are selected THEN harness SHALL bind each contract to a providing capability and record the bindings in `harness.yaml`.
 4. WHEN a contract has no selected provider THEN harness SHALL flag the composition as incomplete (a warning naming the unbound contract), without failing the save.
-5. WHEN two selected capabilities provide the same contract THEN harness SHALL bind deterministically (highest source precedence, then name) and report the alternative as shadowed.
+5. WHEN two capabilities provide the same contract THEN the user SHALL choose which fulfil it — one for a single-select abstract, or several when the abstract sets `multiple: true`. (Superseded: there is no deterministic auto-bind or "shadowed" report; binding is an explicit choice.)
 6. WHEN a local capability overrides a shared one of the same identity THEN the binding SHALL resolve to the local one by the existing precedence (no special handling).
 
 **Independent Test**: Author a tiny abstract skill with two contracts and one capability providing both; select both; save; `harness.yaml` records the bindings and `AGENTS.md` shows the contract with the capability linked. Omit the capability and the save warns about both contracts being unbound.
@@ -87,15 +109,15 @@ A developer's low-level design is the same shape across many projects (hexagonal
 
 | Requirement ID | Story | Phase | Status |
 | -------------- | ----- | ----- | ------ |
-| CMP-01 | P1: abstract/capability frontmatter model | Design | Pending |
-| CMP-02 | P1: compose + bind contracts to capabilities | Design | Pending |
-| CMP-03 | P1: record bindings in harness.yaml | Design | Pending |
-| CMP-04 | P1: flag unbound contracts (incomplete) | Design | Pending |
-| CMP-05 | P1: deterministic bind + shadow report on conflict | Design | Pending |
-| CMP-06 | P1: AGENTS.md renders contract + linked implementations | Design | Pending |
-| CMP-07 | P1: extract low-level-design + lld-typescript from ../cli | Design | Pending |
-| CMP-08 | P2: interactive composition screen (deferred) | Design | Pending |
-| CMP-09 | P3: stack-aware filtering (deferred) | Design | Pending |
+| CMP-01 | P1: abstract/capability frontmatter model (+ `multiple`) | Impl | Done |
+| CMP-02 | P1: user binds contracts to capabilities (single or multi) | Impl | Done |
+| CMP-03 | P1: record bindings in harness.yaml (v3 lists) | Impl | Done |
+| CMP-04 | P1: flag unbound contracts (incomplete) | Impl | Done |
+| CMP-05 | P1: explicit user choice on conflict (no auto-bind/shadow) | Impl | Done (redefined) |
+| CMP-06 | P1: AGENTS.md renders contract + linked implementations | Impl | Done |
+| CMP-07 | P1: extract low-level-design + lld-* from ../cli | Impl | Done |
+| CMP-08 | P2: interactive composition screen | Impl | Done |
+| CMP-09 | P3: stack-aware filtering | Deferred | Pending |
 
 **ID format:** `CMP-[NUMBER]`
 
