@@ -1,9 +1,9 @@
 # harness
 
 **harness is a command-line tool (CLI)** for configuring AI-agent artifacts —
-**rules**, **skills** and **agents** — across your projects from a single shared
-library, generating the `AGENTS.md` that tells agents *what to always load* and
-*what to load only when needed*.
+**rules**, **skills**, **agents** and **MCP setups** — across your projects from a
+single shared library, generating the `AGENTS.md` that tells agents *what to
+always load* and *what to load only when needed*.
 
 `harness` merges a personal library in your home (`~/.harness`) with the
 project-local artifacts in `.agents/`, lets you pick what each project needs in a
@@ -43,7 +43,7 @@ harness          # pick artifacts for this project (interactive)
 Saving writes two files at the project root:
 
 - **`AGENTS.md`** — the agent entry point: a loading protocol plus one table per
-  kind (and a "composed designs" section). Commit it.
+  kind, a "composed designs" section, and an "MCP servers" section. Commit it.
 - **`harness.yaml`** — the manifest of active artifacts (source of truth). Commit
   it; `harness apply` reconstructs the project from it on a fresh clone.
 
@@ -57,7 +57,11 @@ Four artifact kinds share one on-disk convention (adapted from
 | rule  | `rules/`  | `RULE.md`  | Invariant — **load ALWAYS** |
 | skill | `skills/` | `SKILL.md` | Capability — **load on NEED** |
 | agent | `agents/` | `AGENT.md` | Executor — **delegate on NEED** |
-| mcp   | `mcps/`   | `MCP.md`   | Tool-server integration — **set up on NEED** |
+| mcp   | `mcps/`   | `MCP.md`   | How to set up & use an MCP server — **on request** |
+
+An `mcp` artifact is **not** an MCP server. Its `MCP.md` (plus deterministic
+setup scripts) is guidance the agent reads to *configure and use* an MCP server
+for the tool(s) you enable — acted on only when you ask, never loaded as context.
 
 Artifacts resolve across three locations by **precedence** — project `.agents/`
 (`local`) overrides `~/.harness/` (`shared`) overrides configured git sources.
