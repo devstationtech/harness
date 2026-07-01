@@ -23,12 +23,12 @@ coverage*
 /AGENTS.md
 
 # --- Project-local agent artifacts ---
-# Vendored or localized copies of shared / third-party artifacts must NOT be
-# committed here — only artifacts native to harness's own development are kept
-# (the dev rule below and the specs under .agents/specs/). Everything else that
-# lands under the kind containers is ignored. See CONTRIBUTING.md.
-/.agents/skills/
-/.agents/agents/
-/.agents/mcps/
-/.agents/rules/*
-!/.agents/rules/go-code-standards/
+# Localized (vendored) artifacts under .agents/ ARE committed on purpose:
+# localizing is how we standardize the artifacts every contributor works with
+# (the go-code-standards rule, the low-level-design composition, the spec-driven
+# skill, and the specs under .agents/specs/). Be mindful of third-party licenses
+# before localizing something you are not free to redistribute.
+#
+# Only the generated entry point stays out of git (harness.yaml / AGENTS.md
+# above): those mix in each maintainer's personal ~/.harness selections. Run
+# `harness apply` to regenerate them locally. See CONTRIBUTING.md.

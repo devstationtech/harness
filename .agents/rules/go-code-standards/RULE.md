@@ -96,11 +96,29 @@ func NewGitRepository(name, url, ref string) (*GitRepository, error) {
 
 ## 7. Testing
 
-- Table-driven tests with `t.Run` subtests. Keep the existing Given/When/Then comment style.
-- Standard library `testing`; use `google/go-cmp` (`cmp.Diff`) for deep equality assertions. No assertion or mock framework.
-- Test doubles are **hand-written fakes** over the small interfaces (the Kubernetes approach), not generated mocks.
-- Prefer black-box tests (`package x_test`) so tests exercise the exported contract.
-- Every exported behavior and every error path has a test. A bug fix starts with a failing test.
+Follow the **test pyramid**: many fast unit tests, fewer integration tests, a
+handful of true end-to-end ones. Push logic down so it can be unit-tested against
+small interfaces; reserve integration tests for the seams that only real I/O
+exercises.
+
+- **Unit** — table-driven with `t.Run` subtests, Given/When/Then comments. Standard
+  library `testing` + `google/go-cmp` (`cmp.Diff`) for deep equality. No assertion
+  or mock framework. Test doubles are **hand-written fakes** over the small
+  interfaces (the Kubernetes approach), never generated mocks. Prefer black-box
+  tests (`package x_test`) so tests exercise the exported contract. Mark
+  independent tests `t.Parallel()`.
+- **Integration** — exercise **real I/O** against a temp sandbox (`t.TempDir()`,
+  `t.Setenv("HARNESS_HOME", …)`, `t.Chdir(project)`) and drive the actual command
+  surface (e.g. `app.Apply`, `app.Vendor`), not internals. Assert on what a user
+  would see: files written to disk, `harness.yaml` contents, the generated
+  `AGENTS.md`. Read them back and check them — never assert only in memory when the
+  behavior *is* a file on disk. A test that needs the network or `git` guards with
+  a capability check and `t.Skip` when unavailable.
+- **Regression-first coverage** — every exported behavior and every error path has
+  a test, and a bug fix starts with a **failing** test that the fix turns green.
+  When a change alters an on-disk format (a manifest schema bump, an `AGENTS.md`
+  section), pin the new shape with a test *and* keep one that loads the old shape,
+  so regressions surface precisely.
 
 ## 8. Documentation
 
