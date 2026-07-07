@@ -35,7 +35,7 @@ func Upgrade(out io.Writer) error {
 		fmt.Fprintln(out, "Nothing to upgrade.")
 		return nil
 	}
-	configured, err := config.LoadSources(config.SourcesConfigPath(home))
+	configured, err := config.LoadSources(config.SourcesPath(home))
 	if err != nil {
 		return err
 	}

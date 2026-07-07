@@ -55,11 +55,6 @@ func (g GitRepository) Sync(ctx context.Context) error {
 	}
 }
 
-// Commit returns the resolved commit SHA of the current checkout.
-func (g GitRepository) Commit(ctx context.Context) (string, error) {
-	return gitcli.Run(ctx, g.cloneDir, "rev-parse", "HEAD")
-}
-
 // clone makes a fresh shallow checkout into a staging directory on the same
 // volume, then renames it into place so an interrupted clone never leaves a
 // corrupt source active.

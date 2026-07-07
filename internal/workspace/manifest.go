@@ -3,7 +3,9 @@
 package workspace
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -118,7 +120,7 @@ func (m Manifest) Identities() []artifact.Identity {
 func LoadManifest(path string) (Manifest, error) {
 	content, err := os.ReadFile(path)
 	if err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, fs.ErrNotExist) {
 			return Manifest{Version: manifestVersion}, nil
 		}
 		return Manifest{}, err
@@ -126,6 +128,12 @@ func LoadManifest(path string) (Manifest, error) {
 	var manifest Manifest
 	if err := yaml.Unmarshal(content, &manifest); err != nil {
 		return Manifest{}, fmt.Errorf("invalid manifest %s: %w", path, err)
+	}
+	if manifest.Version > manifestVersion {
+		return Manifest{}, fmt.Errorf(
+			"manifest %s uses schema v%d but this harness supports up to v%d — run `harness self-update`",
+			path, manifest.Version, manifestVersion,
+		)
 	}
 	return manifest, nil
 }

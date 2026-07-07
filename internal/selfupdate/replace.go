@@ -1,8 +1,10 @@
 package selfupdate
 
 import (
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -43,21 +45,25 @@ func replaceExecutable(w io.Writer, newBinary []byte) error {
 	dir := filepath.Dir(exe)
 
 	// Fast path: the install directory is writable — temp + atomic rename.
-	if tmp, err := os.CreateTemp(dir, ".harness-update-*"); err == nil {
-		tmpName := tmp.Name()
-		if err := writeBinary(tmp, tmpName, newBinary); err != nil {
-			_ = os.Remove(tmpName)
-			return err
+	tmp, err := os.CreateTemp(dir, ".harness-update-*")
+	if err != nil {
+		// Only a permission problem justifies escalating; anything else (disk
+		// full, missing directory) is a real error, not a reason to sudo.
+		if errors.Is(err, fs.ErrPermission) {
+			return replaceElevated(w, exe, newBinary)
 		}
-		if err := swap(exe, tmpName); err != nil {
-			_ = os.Remove(tmpName)
-			return err
-		}
-		return nil
+		return err
 	}
-
-	// Slow path: the directory needs elevated permissions.
-	return replaceElevated(w, exe, newBinary)
+	tmpName := tmp.Name()
+	if err := writeBinary(tmp, tmpName, newBinary); err != nil {
+		_ = os.Remove(tmpName)
+		return err
+	}
+	if err := swap(exe, tmpName); err != nil {
+		_ = os.Remove(tmpName)
+		return err
+	}
+	return nil
 }
 
 // writeBinary writes data to the open temp file at path and makes it executable.

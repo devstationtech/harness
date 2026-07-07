@@ -211,8 +211,11 @@ func (m Model) Bindings() map[artifact.Identity]map[string][]string {
 	return out
 }
 
+// Init implements tea.Model: it kicks off the background update probe.
 func (m Model) Init() tea.Cmd { return m.checkUpdate }
 
+// Update implements tea.Model: it advances the model in response to key,
+// resize and update-check messages.
 func (m Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := message.(type) {
 	case tea.WindowSizeMsg:
@@ -437,6 +440,7 @@ func (m *Model) ensureVisible() {
 	}
 }
 
+// View implements tea.Model: it renders the current step of the wizard.
 func (m Model) View() string {
 	if m.width == 0 || m.height == 0 {
 		return ""

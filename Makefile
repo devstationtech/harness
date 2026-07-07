@@ -60,6 +60,28 @@ uninstall: ## Remove the installed binary
 test: ## Run all tests
 	$(GO) test ./...
 
+# Coverage ratchet: total statement coverage must never drop below the
+# committed baseline. When a PR raises coverage, raise the baseline with it
+# (make cover prints the new total).
+COVER_PROFILE  := $(DIST)/coverage.out
+COVER_BASELINE := .coverage-baseline
+
+.PHONY: cover
+cover: ## Run all tests with coverage and print the total
+	@mkdir -p $(DIST)
+	$(GO) test -count=1 -coverprofile=$(COVER_PROFILE) ./...
+	@$(GO) tool cover -func=$(COVER_PROFILE) | tail -1
+
+.PHONY: cover-check
+cover-check: cover ## Fail if total coverage drops below $(COVER_BASELINE)
+	@total="$$($(GO) tool cover -func=$(COVER_PROFILE) | awk '/^total:/ {gsub(/%/, "", $$NF); print $$NF}')"; \
+	baseline="$$(cat $(COVER_BASELINE))"; \
+	echo "coverage: $$total% (baseline $$baseline%)"; \
+	if awk -v t="$$total" -v b="$$baseline" 'BEGIN { exit !(t+0 < b+0) }'; then \
+		echo "coverage regression: $$total% is below the $$baseline% baseline — add tests (or update $(COVER_BASELINE) with justification)"; \
+		exit 1; \
+	fi
+
 .PHONY: fmt
 fmt: ## Format the code in place (gofumpt if installed, else gofmt)
 	$(FMT) -w .
@@ -86,7 +108,7 @@ tidy: ## Tidy go.mod / go.sum
 	$(GO) mod tidy
 
 .PHONY: check
-check: ## CI gate: format check + vet + lint + test
+check: ## CI gate: format check + vet + lint + test + coverage ratchet
 	@unformatted="$$($(FMT) -l .)"; \
 	if [ -n "$$unformatted" ]; then \
 		echo "format needed for:"; echo "$$unformatted"; exit 1; \
@@ -97,7 +119,7 @@ check: ## CI gate: format check + vet + lint + test
 	else \
 		echo "warning: golangci-lint not installed (run 'make tools') — skipping lint"; \
 	fi
-	$(GO) test ./...
+	$(MAKE) cover-check
 
 .PHONY: clean
 clean: ## Remove build artifacts
