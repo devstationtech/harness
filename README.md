@@ -5,6 +5,8 @@
 single shared library, generating the `AGENTS.md` that tells agents *what to
 always load* and *what to load only when needed*.
 
+![harness — selecting artifacts for a project](docs/img/harness-select.png)
+
 `harness` merges a personal library in your home (`~/.harness`) with the
 project-local artifacts in `.agents/`, lets you pick what each project needs in a
 small TUI, composes technology-agnostic skills with stack-specific
@@ -96,15 +98,6 @@ harness version    Print the version
 
 Selection-TUI keys and the full per-command reference are in
 **[docs/cli.md](docs/cli.md)**.
-
-```
-Rules · load ALWAYS  (1/1)
-  › [x] go-code-standards  local   Go coding standard for this repository …
-
-Skills · load on NEED  (1/2)
-    [x] spec-kit           shared  Run spec-driven development inside a project …
-    [ ] skill-creator      shared  Author a new harness artifact …
-```
 
 ## Configuration
 

@@ -5,6 +5,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/devstationtech/harness/internal/app"
@@ -64,7 +65,7 @@ func run(args []string) error {
 	}
 }
 
-func printUsage(out *os.File) {
+func printUsage(out io.Writer) {
 	fmt.Fprint(out, `harness — configure AI-agent artifacts across projects
 
 Usage:

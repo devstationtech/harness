@@ -85,9 +85,9 @@ func SpecsDir(projectRoot string) string {
 	return filepath.Join(AgentsDir(projectRoot), SpecsDirName)
 }
 
-// SourcesConfigPath returns the path to the registered sources list under the
+// SourcesPath returns the path to the registered sources list under the
 // shared home.
-func SourcesConfigPath(home string) string {
+func SourcesPath(home string) string {
 	return filepath.Join(home, SourcesFileName)
 }
 

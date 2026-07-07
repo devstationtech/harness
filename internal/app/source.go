@@ -60,7 +60,7 @@ func sourceAdd(out io.Writer, args []string) error {
 	if err != nil {
 		return err
 	}
-	configPath := config.SourcesConfigPath(home)
+	configPath := config.SourcesPath(home)
 	sources, err := config.LoadSources(configPath)
 	if err != nil {
 		return err
@@ -75,7 +75,7 @@ func sourceAdd(out io.Writer, args []string) error {
 		return err
 	}
 
-	sources.Sources = append(sources.Sources, config.SourceConfig{
+	sources.Sources = append(sources.Sources, config.Source{
 		Name: sourceName, Type: "git", URL: url, Ref: *ref,
 	})
 	if err := sources.Save(configPath); err != nil {
@@ -96,7 +96,7 @@ func sourceList(out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	sources, err := config.LoadSources(config.SourcesConfigPath(home))
+	sources, err := config.LoadSources(config.SourcesPath(home))
 	if err != nil {
 		return err
 	}
@@ -126,7 +126,7 @@ func sourceRemove(out io.Writer, args []string) error {
 	if err != nil {
 		return err
 	}
-	configPath := config.SourcesConfigPath(home)
+	configPath := config.SourcesPath(home)
 	sources, err := config.LoadSources(configPath)
 	if err != nil {
 		return err

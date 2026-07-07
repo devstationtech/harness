@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"sort"
 	"time"
 
 	"github.com/devstationtech/harness/internal/artifact"
@@ -186,7 +185,7 @@ func performSelfUpdate(out io.Writer, version string) error {
 // digest of each vendored artifact (keyed by identity). Local and shared
 // selections pass through untouched (they are referenced in place).
 func materialize(selected []artifact.Artifact, projectRoot, home string, localized map[artifact.Identity]bool) ([]artifact.Artifact, map[artifact.Identity]string, error) {
-	remotes, err := config.LoadSources(config.SourcesConfigPath(home))
+	remotes, err := config.LoadSources(config.SourcesPath(home))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -262,7 +261,7 @@ func projectSources(home, projectRoot string) ([]source.Source, error) {
 		source.NewLocalDirectory(source.LocalName, config.AgentsDir(projectRoot), artifact.SourceLocal),
 		source.NewLocalDirectory(source.HomeName, home, artifact.SourceShared),
 	}
-	configured, err := config.LoadSources(config.SourcesConfigPath(home))
+	configured, err := config.LoadSources(config.SourcesPath(home))
 	if err != nil {
 		return nil, err
 	}
@@ -301,9 +300,6 @@ func printSaveSummary(out io.Writer, projectRoot string, selected []artifact.Art
 	for _, a := range selected {
 		counts[a.Kind]++
 	}
-	kinds := artifact.Kinds()
-	sort.SliceStable(kinds, func(i, j int) bool { return kinds[i].Title() < kinds[j].Title() })
-
 	fmt.Fprintf(out, "Saved %d artifact(s).\n", len(selected))
 	for _, kind := range artifact.Kinds() {
 		fmt.Fprintf(out, "  %-7s %d\n", kind.Container()+":", counts[kind])

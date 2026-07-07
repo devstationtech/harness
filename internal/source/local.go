@@ -58,7 +58,7 @@ func (d LocalDirectory) resolveByConvention() ([]artifact.Artifact, []Issue, err
 		container := filepath.Join(d.base, kind.Container())
 		entries, err := os.ReadDir(container)
 		if err != nil {
-			if os.IsNotExist(err) {
+			if errors.Is(err, fs.ErrNotExist) {
 				continue
 			}
 			return nil, nil, err

@@ -25,7 +25,7 @@ func TestLoadSourcesMissingFileIsEmpty(t *testing.T) {
 func TestSourcesRoundTrip(t *testing.T) {
 	// @Given a sources config with one git source
 	path := filepath.Join(t.TempDir(), "home", "sources.yaml")
-	want := config.SourcesConfig{Sources: []config.SourceConfig{
+	want := config.Sources{Sources: []config.Source{
 		{Name: "mine", Type: "git", URL: "git@example.com:me/skills.git", Ref: "main"},
 	}}
 
@@ -46,7 +46,7 @@ func TestSourcesRoundTrip(t *testing.T) {
 
 func TestSourcesFind(t *testing.T) {
 	// @Given a config with one source
-	cfg := config.SourcesConfig{Sources: []config.SourceConfig{
+	cfg := config.Sources{Sources: []config.Source{
 		{Name: "mine", Type: "git", URL: "u"},
 	}}
 

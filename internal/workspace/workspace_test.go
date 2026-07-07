@@ -105,6 +105,31 @@ func TestLoadManifestMissingFileIsEmpty(t *testing.T) {
 	}
 }
 
+func TestLoadManifestRejectsNewerSchema(t *testing.T) {
+	// @Given a manifest written by a future harness (schema version above ours)
+	const future = `version: 99
+selections:
+    - kind: skill
+      name: cqrs
+      source: home
+`
+	path := filepath.Join(t.TempDir(), "harness.yaml")
+	if err := os.WriteFile(path, []byte(future), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// @When the manifest is loaded
+	_, err := LoadManifest(path)
+
+	// @Then it is rejected with a clear upgrade hint instead of being misread
+	if err == nil {
+		t.Fatal("expected an error for a newer manifest schema, got none")
+	}
+	if !strings.Contains(err.Error(), "schema v99") || !strings.Contains(err.Error(), "self-update") {
+		t.Errorf("error should name the schema and hint at self-update, got: %v", err)
+	}
+}
+
 func TestApplyWritesManifestAndAgentsFile(t *testing.T) {
 	// @Given a project root and a shared artifact referenced in place
 	projectRoot := t.TempDir()

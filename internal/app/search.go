@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/devstationtech/harness/internal/artifact"
 	"github.com/devstationtech/harness/internal/config"
@@ -16,10 +17,10 @@ import (
 // index does not exist yet, it is built on demand from the currently available
 // sources without touching the network.
 func Search(out io.Writer, args []string) error {
-	query := ""
-	if len(args) > 0 {
-		query = args[0]
-	}
+	// A multi-word query is matched as one phrase (the index match is
+	// substring-based), so `harness search git source` is not silently
+	// truncated to its first word.
+	query := strings.Join(args, " ")
 
 	home, err := config.SharedHome()
 	if err != nil {
@@ -54,7 +55,7 @@ func ensureIndex(home string) error {
 	if _, err := index.Refresh(indexDir, source.NewLocalDirectory(source.HomeName, home, artifact.SourceShared)); err != nil {
 		return err
 	}
-	configured, err := config.LoadSources(config.SourcesConfigPath(home))
+	configured, err := config.LoadSources(config.SourcesPath(home))
 	if err != nil {
 		return err
 	}

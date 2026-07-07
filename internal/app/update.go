@@ -29,7 +29,7 @@ func Update(out io.Writer) error {
 	}
 	fmt.Fprintf(out, "  %-24s %d artifact(s)\n", source.HomeName, count)
 
-	configured, err := config.LoadSources(config.SourcesConfigPath(home))
+	configured, err := config.LoadSources(config.SourcesPath(home))
 	if err != nil {
 		return err
 	}

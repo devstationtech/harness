@@ -44,7 +44,7 @@ func Apply(out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	configured, err := config.LoadSources(config.SourcesConfigPath(home))
+	configured, err := config.LoadSources(config.SourcesPath(home))
 	if err != nil {
 		return err
 	}
