@@ -6,8 +6,10 @@ says *what* it needs to store and retrieve; the adapter decides *how*.
 ## Building blocks
 
 - **Repository port** — a domain-owned interface named for the collection it
-  guards (`Clusters`, `Vaults`), with methods in domain vocabulary: `of(id)`,
-  `byName(name)`, `exists(name)`, `save(aggregate)`, `remove(id)`.
+  guards (`Clusters`, `Vaults`), with methods in domain vocabulary covering
+  lookup by id, lookup by name, existence, save and removal. Concrete
+  spellings and casing are the capability's (a language may forbid some —
+  lowercase interface methods are unimplementable across packages in Go).
 - **Persistence adapter** — the outbound implementation (filesystem, SQL, a
   document store...) that maps aggregates to and from storage.
 
