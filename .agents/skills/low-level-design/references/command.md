@@ -11,7 +11,8 @@ aggregate → outbound port → events**.
 - **Handler** — orchestrates one command: builds value objects from the
   command's primitives, loads/creates the aggregate through a port, calls
   aggregate methods, persists through the port, returns a minimal result. One
-  handler per command.
+  unit of orchestration per command — whether it is a handler class or a plain
+  function is the capability's choice.
 - **Factory** (optional) — when constructing an aggregate is non-trivial or
   specialised (e.g. per provider), encapsulate it in a factory the handler uses.
 - **Application Service** (optional) — orchestration spanning multiple

@@ -4,7 +4,7 @@ description: Agnostic low-level design contract — hexagonal architecture, tact
 metadata:
   category: architecture
   author: andrespineli
-  version: "0.1.0"
+  version: "0.2.0"
 contracts:
   - hexagonal
   - domain
@@ -22,9 +22,24 @@ application orchestrates it through commands and queries, and the outside world
 reaches it only through ports and adapters.
 
 This skill is **abstract** — it defines *contracts* (concepts and rules). A
-stack **capability** (e.g. `lld-typescript`) implements each contract with
-concrete code. harness composes the two: load this contract, then the chosen
+stack **capability** (e.g. `lld-go`) implements each contract with concrete
+code. harness composes the two: load this contract, then the chosen
 implementation per concern.
+
+Contracts bind at two strengths:
+
+- **Rules** are universal: dependency direction, domain purity, where
+  invariants live, thin orchestration, read/write separation. Every capability
+  honours them.
+- **Structural defaults** — directory trees, one-type-per-file, method
+  spellings, whether a handler is a class or a function — are defaults a
+  capability may **replace wholesale** when the stack's idiom differs. A
+  capability that replaces a default must state what honours the underlying
+  rule instead (e.g. Go replaces layer directories with compiler-enforced
+  import direction).
+
+When this contract and the loaded capability disagree on structure, **the
+capability wins** — it is the translation of this contract into its stack.
 
 ## The four layers
 
