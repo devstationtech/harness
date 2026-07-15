@@ -5,6 +5,22 @@
 single shared library, generating the `AGENTS.md` that tells agents *what to
 always load* and *what to load only when needed*.
 
+<div align="center">
+
+[![CI](https://github.com/devstationtech/harness/actions/workflows/ci.yml/badge.svg)](https://github.com/devstationtech/harness/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/devstationtech/harness)](https://github.com/devstationtech/harness/releases/latest)
+[![Go Report Card](https://goreportcard.com/badge/github.com/devstationtech/harness)](https://goreportcard.com/report/github.com/devstationtech/harness)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
+
+[![Go](https://img.shields.io/badge/Go-00ADD8?logo=go&logoColor=white)](https://go.dev)
+[![Bubble Tea](https://img.shields.io/badge/Bubble_Tea-TUI-FF75B7)](https://github.com/charmbracelet/bubbletea)
+[![AGENTS.md](https://img.shields.io/badge/AGENTS.md-generator-0b7285)](https://agents.md)
+[![MCP](https://img.shields.io/badge/MCP-setups-6e56cf)](https://modelcontextprotocol.io)
+[![Platforms](https://img.shields.io/badge/platforms-Linux%20·%20macOS%20·%20Windows-informational)](#install)
+
+</div>
+
 ![harness — selecting artifacts for a project](docs/img/harness-select.png)
 
 `harness` merges a personal library in your home (`~/.harness`) with the
